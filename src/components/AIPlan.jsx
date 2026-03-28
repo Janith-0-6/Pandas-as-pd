@@ -3,28 +3,41 @@ import { Loader2, TrendingUp, BrainCircuit, Target, Lightbulb, ChevronRight } fr
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
-export default function AIPlan({ userProfile }) {
-  const [loading, setLoading] = useState(true);
+export default function AIPlan({ userProfile, shouldGenerate = false }) {
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
+    if (!shouldGenerate) {
+      setLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
     async function fetchPlan() {
+      setLoading(true);
+      setError(null);
+
       try {
         const response = await fetch(`${API_BASE}/api/plan`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
+          signal: controller.signal,
           body: JSON.stringify({
             age: userProfile.age,
             income: userProfile.income,
+            expenses: userProfile.expenses,
             interests: userProfile.interests,
             risk: userProfile.risk
           })
         });
 
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           throw new Error(payload.error || 'Failed to generate financial plan.');
@@ -32,7 +45,12 @@ export default function AIPlan({ userProfile }) {
 
         setPlan(payload.plan);
       } catch (err) {
+        if (err.name === 'AbortError') {
+          return;
+        }
+
         console.error(err);
+        setPlan(null);
         setError(err.message || 'Failed to initialize AI allocation model.');
       } finally {
         setLoading(false);
@@ -40,7 +58,22 @@ export default function AIPlan({ userProfile }) {
     }
 
     fetchPlan();
-  }, [userProfile]);
+
+    return () => controller.abort();
+  }, [userProfile, retryCount, shouldGenerate]);
+
+  if (!shouldGenerate) {
+    return (
+      <div className="glass-card rounded-3xl p-10 flex flex-col items-center justify-center min-h-[340px] text-center border border-white/10">
+        <BrainCircuit className="h-8 w-8 text-neutral-400 mb-4" />
+        <p className="text-[10px] uppercase tracking-[0.15em] text-neutral-500 font-semibold mb-2">AI Advisory</p>
+        <h3 className="text-xl font-light text-neutral-100 mb-3">Plan generation is on standby.</h3>
+        <p className="text-sm text-neutral-400 max-w-xl">
+          Generate the plan from the Present & Future page whenever you want to run a fresh recommendation.
+        </p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -60,14 +93,25 @@ export default function AIPlan({ userProfile }) {
         <Target className="h-8 w-8 text-red-400 mb-4" />
         <p className="text-red-400/80 mb-2 font-mono uppercase text-xs tracking-widest">System Error</p>
         <p className="text-sm text-neutral-400 text-center">{error}</p>
-        <div className="mt-6 p-4 bg-red-950/20 border border-red-500/10 rounded-lg text-[10px] font-mono text-red-400 w-full text-center">
-          OPENAI API VERIFICATION FAILED
+        <button
+          type="button"
+          onClick={() => setRetryCount((count) => count + 1)}
+          className="mt-6 px-5 py-2 rounded-lg border border-red-400/40 text-red-300 text-xs font-mono uppercase tracking-widest hover:bg-red-500/10 transition"
+        >
+          Retry Plan Generation
+        </button>
+        <div className="mt-4 p-4 bg-red-950/20 border border-red-500/10 rounded-lg text-[10px] font-mono text-red-400 w-full text-center">
+          AI REQUEST FAILED
         </div>
       </div>
     );
   }
 
   if (!plan) return null;
+
+  // Protect against malformed JSON structure causing React to crash (White Screen)
+  const budget = plan.monthly_budget || {};
+  const ideas = plan.investment_ideas || [];
 
   return (
     <div className="glass-card rounded-3xl overflow-hidden relative group">
@@ -92,27 +136,44 @@ export default function AIPlan({ userProfile }) {
           <div className="grid grid-cols-2 sm:grid-cols-4 bg-black/30 rounded-lg p-2 border border-white/10 gap-2">
             <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition rounded-l-md">
               <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Needs</p>
-              <p className="text-lg font-mono text-neutral-100">{plan.monthly_budget.needs_percentage}%</p>
+              <p className="text-lg font-mono text-neutral-100">{budget.needs_percentage || 50}%</p>
             </div>
             <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition">
               <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Wants</p>
-              <p className="text-lg font-mono text-neutral-100">{plan.monthly_budget.wants_percentage}%</p>
+              <p className="text-lg font-mono text-neutral-100">{budget.wants_percentage || 30}%</p>
             </div>
             <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition">
               <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Liquidity</p>
-              <p className="text-lg font-mono text-neutral-100">{plan.monthly_budget.savings_percentage}%</p>
+              <p className="text-lg font-mono text-neutral-100">{budget.savings_percentage || 10}%</p>
             </div>
             <div className="flex-1 px-4 py-2 text-center bg-brand-accent/10 border border-brand-accent/30 rounded-md">
               <p className="text-[10px] uppercase tracking-wider text-brand-light font-bold mb-1">Assets</p>
-              <p className="text-lg font-mono text-brand-light font-semibold">{plan.monthly_budget.investment_percentage}%</p>
+              <p className="text-lg font-mono text-brand-light font-semibold">{budget.investment_percentage || 10}%</p>
             </div>
           </div>
         </div>
 
+        {/* Missing Output Rendered: Life at 60 Comparison */}
+        {(plan.life_at_60_with_investing || plan.life_at_60_without_investing) && (
+          <div className="mb-10">
+            <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4">Life at 60 Projection</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-black/20 rounded-xl border border-white/5">
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-2">Without Investing</p>
+                <p className="text-xs text-neutral-400 leading-relaxed font-light">{plan.life_at_60_without_investing || "Standard retirement timeline with high inflation vulnerability."}</p>
+              </div>
+              <div className="p-4 bg-brand-accent/5 rounded-xl border border-brand-accent/20">
+                <p className="text-[10px] font-bold text-brand-light uppercase tracking-widest mb-2">With Strategy</p>
+                <p className="text-xs text-neutral-200 leading-relaxed font-light">{plan.life_at_60_with_investing || "Early financial independence and robust wealth accumulation."}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div>
           <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4">Recommended Vehicles</h3>
           <div className="space-y-3">
-            {plan.investment_ideas.map((idea, idx) => (
+            {ideas.map((idea, idx) => (
               <div key={idx} className="p-5 bg-black/25 rounded-xl border border-white/10 hover:border-brand-accent/40 transition-all hover:bg-black/40 group/card cursor-default">
                 <div className="flex justify-between items-start mb-2 gap-4">
                   <span className="font-semibold text-neutral-100 text-sm group-hover/card:text-brand-light transition">{idea.name}</span>

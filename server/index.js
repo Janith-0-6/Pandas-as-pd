@@ -6,8 +6,29 @@ import OpenAI from 'openai';
 const app = express();
 const PORT = Number(process.env.PORT) || 8787;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const AI_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
-app.use(cors({ origin: FRONTEND_ORIGIN }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow non-browser tools (curl/postman) with no origin header.
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isConfiguredOrigin = origin === FRONTEND_ORIGIN;
+      const isLocalhostDevOrigin = /^http:\/\/localhost:\d+$/.test(origin);
+
+      if (isConfiguredOrigin || isLocalhostDevOrigin) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    }
+  })
+);
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {
@@ -23,11 +44,12 @@ app.post('/api/plan', async (req, res) => {
       });
     }
 
-    const { age, income, interests, risk } = req.body ?? {};
+    const { age, income, expenses, interests, risk } = req.body ?? {};
 
     if (
       !Number.isFinite(Number(age)) ||
       !Number.isFinite(Number(income)) ||
+      !Number.isFinite(Number(expenses)) ||
       !Array.isArray(interests) ||
       interests.length === 0 ||
       typeof risk !== 'string' ||
@@ -38,16 +60,20 @@ app.post('/api/plan', async (req, res) => {
       });
     }
 
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ 
+      apiKey,
+      baseURL: 'https://openrouter.ai/api/v1'
+    });
 
     const prompt = `User Data:
 Age: ${age}
 Income: INR ${income}
+Baseline Monthly Expenses: INR ${expenses}
 Interests: ${interests.join(', ')}
 Risk Appetite: ${risk}
 
 Instructions:
-Create a tailored financial plan for this user. Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exact structure:
+Create a tailored financial plan for this user taking into account their unique baseline expenses. Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exact structure:
 {
   "monthly_budget": {
     "needs_percentage": number,
@@ -69,13 +95,19 @@ Create a tailored financial plan for this user. Output ONLY valid JSON, with not
 }`;
 
     const msg = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODEL,
       max_tokens: 1024,
-      system: 'You are a professional wealth advisor targeting Gen Z. Give astute, sharp advice. Return pure JSON.',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [
+        { role: 'system', content: 'You are a professional wealth advisor targeting Gen Z. Give astute, sharp advice. Return pure JSON.' },
+        { role: 'user', content: prompt }
+      ]
     });
 
     const text = msg.choices?.[0]?.message?.content ?? '';
+    if (!text || typeof text !== 'string') {
+      return res.status(502).json({ error: 'AI provider returned an empty response.' });
+    }
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
@@ -91,8 +123,19 @@ Create a tailored financial plan for this user. Output ONLY valid JSON, with not
 
     return res.json({ plan: data });
   } catch (error) {
-    console.error('Plan generation failed:', error);
-    return res.status(500).json({ error: 'Failed to generate plan from AI model.' });
+    const upstreamMessage = error?.error?.message || error?.message || null;
+    const status = Number(error?.status);
+
+    console.error('Plan generation failed:', {
+      status: Number.isFinite(status) ? status : 'unknown',
+      message: upstreamMessage
+    });
+
+    return res.status(502).json({
+      error: upstreamMessage
+        ? `AI provider error: ${upstreamMessage}`
+        : 'Failed to generate plan from AI model.'
+    });
   }
 });
 
