@@ -1,68 +1,51 @@
 import { useEffect, useState } from 'react';
+import Login from './components/Login';
 import Onboarding from './components/Onboarding';
-import Dashboard from './components/Dashboard';
-
-const DEFAULT_ONBOARDING_DRAFT = {
-  name: '',
-  age: 22,
-  income: '',
-  interests: [],
-  risk: ''
-};
-
-const getViewFromLocation = () => {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('view') === 'dashboard' ? 'dashboard' : 'onboarding';
-};
-
-const setViewInUrl = (view, mode = 'push') => {
-  const url = new URL(window.location.href);
-
-  if (view === 'dashboard') {
-    url.searchParams.set('view', 'dashboard');
-  } else {
-    url.searchParams.delete('view');
-  }
-
-  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-  if (mode === 'replace') {
-    window.history.replaceState(null, '', nextUrl);
-    return;
-  }
-  window.history.pushState(null, '', nextUrl);
-};
-
-function App() {
-  const [view, setView] = useState(() => getViewFromLocation());
+import Dashboard from './components/Dashboard';function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
-  const [onboardingDraft, setOnboardingDraft] = useState(DEFAULT_ONBOARDING_DRAFT);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setView(getViewFromLocation());
+    const handlePopState = (event) => {
+      const state = event.state;
+      if (state?.screen === 'dashboard' && state?.userProfile) {
+        setIsLoggedIn(true);
+        setUserProfile(state.userProfile);
+        return;
+      }
+      if (state?.screen === 'onboarding' && state?.isLoggedIn) {
+        setIsLoggedIn(true);
+        setUserProfile(null);
+        return;
+      }
+
+      setIsLoggedIn(false);
+      setUserProfile(null);
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    if (!window.history.state) {
+      window.history.replaceState({ screen: 'login' }, '', '/');
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!userProfile && view === 'dashboard') {
-      setView('onboarding');
-      setViewInUrl('onboarding', 'replace');
-    }
-  }, [userProfile, view]);
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+    window.history.pushState({ screen: 'onboarding', isLoggedIn: true }, '', '/setup');
+  };
 
-  const handleComplete = (profile, draft) => {
+  const handleComplete = (profile) => {
     setUserProfile(profile);
-    setOnboardingDraft(draft);
-    setView('dashboard');
-    setViewInUrl('dashboard');
+    window.history.pushState({ screen: 'dashboard', userProfile: profile }, '', '/dashboard');
   };
 
   const handleReset = () => {
-    setView('onboarding');
-    setViewInUrl('onboarding');
+    setUserProfile(null);
+    window.history.pushState({ screen: 'onboarding', isLoggedIn: true }, '', '/setup');
   };
 
   return (
@@ -71,14 +54,12 @@ function App() {
       <div className="pointer-events-none absolute top-[28%] -left-20 h-56 w-56 rounded-full bg-amber-200/10 blur-3xl animate-float-slow" />
 
       <main className="container mx-auto max-w-6xl p-4 sm:p-6 lg:p-10 relative z-10">
-        {view === 'dashboard' && userProfile ? (
-          <Dashboard userProfile={userProfile} onReset={handleReset} />
+        {!isLoggedIn ? (
+          <Login onLogin={handleLogin} />
+        ) : !userProfile ? (
+          <Onboarding onComplete={handleComplete} />
         ) : (
-          <Onboarding
-            onComplete={handleComplete}
-            initialData={onboardingDraft}
-            onDraftChange={setOnboardingDraft}
-          />
+          <Dashboard userProfile={userProfile} onReset={handleReset} />
         )}
       </main>
     </div>
