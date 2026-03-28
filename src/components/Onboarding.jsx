@@ -4,17 +4,28 @@ import { ArrowRight, BriefcaseBusiness } from 'lucide-react';
 const INTERESTS = ['Gaming', 'Music', 'Sports', 'Tech', 'Travel', 'Fashion', 'Food'];
 const RISK_LEVELS = ['Conservative (Low)', 'Balanced (Medium)', 'Aggressive (High)'];
 
-export default function Onboarding({ onComplete }) {
-  const [formData, setFormData] = useState({
-    name: '',
-    age: 22,
-    income: '',
-    interests: [],
-    risk: ''
-  });
+const DEFAULT_FORM_DATA = {
+  name: '',
+  age: 22,
+  income: '',
+  interests: [],
+  risk: ''
+};
+
+export default function Onboarding({ onComplete, initialData, onDraftChange }) {
+  const [formData, setFormData] = useState(() => ({
+    ...DEFAULT_FORM_DATA,
+    ...initialData
+  }));
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (onDraftChange) {
+      onDraftChange(formData);
+    }
+  }, [formData, onDraftChange]);
 
   const toggleInterest = (interest) => {
     setFormData(prev => ({
@@ -31,7 +42,7 @@ export default function Onboarding({ onComplete }) {
     
     // Convert risk back to concise format
     const riskLevel = formData.risk.split(' ')[0];
-    onComplete({ ...formData, risk: riskLevel });
+    onComplete({ ...formData, risk: riskLevel }, formData);
   };
 
   return (
