@@ -1,31 +1,38 @@
 import { useState, useEffect } from 'react';
 import { ArrowRight, BriefcaseBusiness } from 'lucide-react';
 
-const INTERESTS = ['Gaming', 'Music', 'Sports', 'Tech', 'Travel', 'Fashion', 'Food'];
+const INTERESTS = [
+  'Gaming', 'Music', 'Sports', 'Tech', 'Travel', 'Fashion', 'Food',
+  'Anime', 'Crypto', 'Fitness', 'Content Creation', 'Streaming',
+  'Photography', 'Skincare', 'Thrifting', 'Startups', 'Art & Design',
+  'K-Pop', 'Sustainability', 'Mental Health', 'Podcasts', 'Sneakers',
+  'Cooking', 'DIY / Crafts'
+];
 const RISK_LEVELS = ['Conservative (Low)', 'Balanced (Medium)', 'Aggressive (High)'];
 
-const DEFAULT_FORM_DATA = {
-  name: '',
-  age: 22,
-  income: '',
-  interests: [],
-  risk: ''
-};
-
-export default function Onboarding({ onComplete, initialData, onDraftChange }) {
-  const [formData, setFormData] = useState(() => ({
-    ...DEFAULT_FORM_DATA,
-    ...initialData
-  }));
+export default function Onboarding({ onComplete }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    age: 22,
+    income: '',
+    expenses: '',
+    interests: [],
+    risk: ''
+  });
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Clamp expenses whenever income decreases below current expenses
   useEffect(() => {
-    if (onDraftChange) {
-      onDraftChange(formData);
+    if (formData.income && formData.expenses) {
+      const inc = Number(formData.income);
+      const exp = Number(formData.expenses);
+      if (exp > inc) {
+        setFormData(prev => ({ ...prev, expenses: String(inc) }));
+      }
     }
-  }, [formData, onDraftChange]);
+  }, [formData.income]);
 
   const toggleInterest = (interest) => {
     setFormData(prev => ({
@@ -38,11 +45,11 @@ export default function Onboarding({ onComplete, initialData, onDraftChange }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.income || !formData.risk || formData.interests.length === 0) return;
+    if (!formData.name || !formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0) return;
     
     // Convert risk back to concise format
     const riskLevel = formData.risk.split(' ')[0];
-    onComplete({ ...formData, risk: riskLevel }, formData);
+    onComplete({ ...formData, risk: riskLevel });
   };
 
   return (
@@ -95,21 +102,49 @@ export default function Onboarding({ onComplete, initialData, onDraftChange }) {
         </div>
 
         {/* Income */}
-        <div className="group">
-          <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Monthly Discretionary Income (INR)</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <span className="text-neutral-500 font-mono">₹</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="group">
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Monthly Income (INR)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <span className="text-neutral-500 font-mono">₹</span>
+              </div>
+              <input 
+                type="number" 
+                min="0"
+                placeholder="25,000"
+                className="w-full bg-black/30 border border-white/15 rounded-xl pl-10 pr-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500 font-mono"
+                value={formData.income}
+                onChange={e => setFormData({...formData, income: e.target.value})}
+                required
+              />
             </div>
-            <input 
-              type="number" 
-              min="0"
-              placeholder="10,000"
-              className="w-full bg-black/30 border border-white/15 rounded-xl pl-10 pr-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500 font-mono"
-              value={formData.income}
-              onChange={e => setFormData({...formData, income: e.target.value})}
-              required
-            />
+          </div>
+          
+          <div className="group">
+            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-rose-400">Monthly Essential Expenses (Daily Needs)</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <span className="text-neutral-500 font-mono">₹</span>
+              </div>
+              <input 
+                type="number" 
+                min="0"
+                max={formData.income ? Number(formData.income) : undefined}
+                placeholder="10,000"
+                className="w-full bg-black/30 border border-white/15 rounded-xl pl-10 pr-4 py-3 text-white focus:outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20 transition placeholder-neutral-500 font-mono"
+                value={formData.expenses}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (formData.income && Number(val) > Number(formData.income)) return;
+                  setFormData({...formData, expenses: val});
+                }}
+                required
+              />
+              {formData.income && (
+                <p className="text-[11px] text-neutral-500 mt-1.5 pl-1">Max ₹{Number(formData.income).toLocaleString('en-IN')} (cannot exceed income)</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -165,10 +200,10 @@ export default function Onboarding({ onComplete, initialData, onDraftChange }) {
         <div className="pt-4">
           <button 
             type="submit"
-            disabled={!formData.name || !formData.income || !formData.risk || formData.interests.length === 0}
+            disabled={!formData.name || !formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0}
             className="w-full group relative flex items-center justify-center gap-3 bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950 font-semibold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 overflow-hidden"
           >
-            <span className="relative z-10 flex items-center gap-2">Generate My Strategy <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" /></span>
+            <span className="relative z-10 flex items-center gap-2">See Your Future <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" /></span>
           </button>
           <p className="text-center text-xs text-neutral-400 mt-3">Your data stays in this session and powers personalized projections only.</p>
         </div>
