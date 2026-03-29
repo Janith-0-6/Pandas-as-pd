@@ -5,11 +5,14 @@ import cors from 'cors';
 const app = express();
 const PORT = Number(process.env.PORT) || 8787;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-pro';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 async function generateGeminiJson(prompt) {
   const endpoint = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  
+  console.log('[generateGeminiJson] Endpoint:', endpoint.replace(GEMINI_API_KEY, 'API_KEY_REDACTED'));
+  console.log('[generateGeminiJson] Prompt length:', prompt.length);
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -29,12 +32,21 @@ async function generateGeminiJson(prompt) {
     })
   });
 
+  console.log('[generateGeminiJson] Response status:', response.status);
+
   if (!response.ok) {
     const upstreamBody = await response.text().catch(() => '');
+    console.error('[generateGeminiJson] Error response:', upstreamBody);
     throw new Error(`Gemini HTTP ${response.status}: ${upstreamBody || 'unknown upstream error'}`);
   }
 
   const payload = await response.json();
+  console.log('[generateGeminiJson] Payload structure:', {
+    hasCandidates: !!payload?.candidates,
+    candidateCount: payload?.candidates?.length,
+    hasContent: !!payload?.candidates?.[0]?.content
+  });
+
   const text = payload?.candidates?.[0]?.content?.parts
     ?.map((part) => part?.text || '')
     .join('')
@@ -92,6 +104,12 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/plan', async (req, res) => {
   try {
+    console.log('[/api/plan] Request received:', {
+      body: req.body,
+      modelUsed: GEMINI_MODEL,
+      hasApiKey: !!GEMINI_API_KEY
+    });
+
     if (!GEMINI_API_KEY) {
       return res.status(500).json({
         error: 'Missing GEMINI_API_KEY on the backend environment.'
@@ -151,14 +169,17 @@ Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exac
   "key_insight": "string (one punchy sentence)"
 }`;
 
+    console.log('[/api/plan] Calling Gemini API with model:', GEMINI_MODEL);
     const data = await generateGeminiJson(prompt);
+    console.log('[/api/plan] Gemini response received:', data);
 
     return res.json({ plan: data });
   } catch (error) {
     const upstreamMessage = error?.message || null;
 
-    console.error('Plan generation failed:', {
-      message: upstreamMessage
+    console.error('[/api/plan] Plan generation failed:', {
+      message: upstreamMessage,
+      errorDetails: error
     });
 
     return res.status(502).json({

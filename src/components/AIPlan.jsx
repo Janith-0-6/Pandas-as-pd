@@ -209,6 +209,8 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
         await new Promise((resolve) => setTimeout(resolve, refreshingExistingPlan ? 700 : 1100));
         if (controller.signal.aborted) return;
 
+        console.log('AIPlan: Fetching from', `${API_BASE}/api/plan`, 'with profile:', userProfile);
+
         const response = await fetch(`${API_BASE}/api/plan`, {
           method: 'POST',
           headers: {
@@ -223,12 +225,18 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
           })
         });
 
+        console.log('AIPlan: Response status:', response.status);
+
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
+          console.error('AIPlan: API error data:', errorData);
           throw new Error(errorData.error || `API error: ${response.status}`);
         }
 
-        const { plan: apiPlan } = await response.json();
+        const responseData = await response.json();
+        console.log('AIPlan: Response data:', responseData);
+        
+        const apiPlan = responseData?.plan;
 
         // Transform API response to match component structure
         const transformedPlan = {
@@ -245,6 +253,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
           rawPlan: apiPlan // Store full plan for reference
         };
 
+        console.log('AIPlan: Transformed plan:', transformedPlan);
         setPlan(transformedPlan);
         setSelectedCategory('index');
       } catch (err) {
