@@ -21,7 +21,7 @@ const CATEGORY_LABELS = {
   equity: 'Experimenting'
 };
 
-const marketRecommendations = {
+const defaultMarketRecommendations = {
   fd: [
     {
       name: 'High-Yield Digital FDs',
@@ -102,65 +102,6 @@ const sanitizeAllocations = (allocations) => {
   });
 };
 
-function generateMarketInsights(allocations, profile, investmentPercentage) {
-  const safeAllocations = sanitizeAllocations(allocations);
-  const maxAllocation = Math.max(...safeAllocations);
-  const dominantIndex = safeAllocations.findIndex((value) => value === maxAllocation);
-  const dominantBucket = BUCKETS[dominantIndex] || BUCKETS[1];
-
-  const totalAllocated = safeAllocations.reduce((sum, value) => sum + value, 0);
-  const weightedRate = totalAllocated > 0
-    ? safeAllocations.reduce((sum, value, idx) => sum + (value / totalAllocated) * BUCKETS[idx].rate, 0)
-    : 10;
-
-  const monthlyInvestment = (Number(profile?.income || 0) * Number(investmentPercentage || 0)) / 100;
-  const investedContribution = monthlyInvestment * (totalAllocated / 100);
-  const yearsTo60 = Math.max(1, 60 - Number(profile?.age || 22));
-  const months = yearsTo60 * 12;
-  const monthlyRate = weightedRate / 100 / 12;
-  const projectedAt60 = monthlyRate > 0
-    ? investedContribution * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate)
-    : investedContribution * months;
-
-  const suggestionsByBucket = {
-    equity: {
-      trendTitle: 'High-Risk Equity Energy',
-      trendSignals: ['Defence/Railway PSU stocks', 'Tech-heavy Smallcases', 'Nifty Next 50 Index'],
-      vibe: `No cap, this is main-character energy. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 🚀 Your money can do overtime while you stay in your growth era.`
-    },
-    fd: {
-      trendTitle: 'Low-Risk Stability Mode',
-      trendSignals: ['High-yield digital FDs via Stable Money', 'P2P lending for inflation-beating returns', 'Laddered fixed-income stack'],
-      vibe: `W risk control. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 🌿 You're securing the soft life without entering panic mode.`
-    },
-    gold: {
-      trendTitle: 'Diversifier Gold Stack',
-      trendSignals: ['Sovereign Gold Bonds (SGBs) for tax-free maturity', 'Digital Gold SIPs', 'Gold ETF allocation for liquidity'],
-      vibe: `Portfolio looking balanced and unbothered. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 💫 You're avoiding the broke era with hedge power.`
-    },
-    index: {
-      trendTitle: 'Core Index Compounding',
-      trendSignals: ['Nifty 50 ETF core allocation', 'Sensex Index funds for broad-market exposure', 'Nifty Next 50 tactical tilt'],
-      vibe: `This is a W portfolio path. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 📈 Slow and steady but still elite over the long run.`
-    }
-  };
-
-  const dominant = suggestionsByBucket[dominantBucket.id] || suggestionsByBucket.index;
-
-  return {
-    keyInsight: `${dominant.trendTitle}: ${Math.round(maxAllocation)}% allocation is leading your strategy right now.`,
-    dominantTitle: dominant.trendTitle,
-    trendSignals: dominant.trendSignals,
-    dominantCategory: dominantBucket.id,
-    projectedText: dominant.vibe,
-    budgetBreakdown: {
-      needs: Math.min(60, Math.max(40, Math.round((Number(profile?.expenses || 0) / Math.max(Number(profile?.income || 1), 1)) * 100))),
-      wants: Math.max(15, 100 - Math.round(Number(investmentPercentage || 0)) - Math.min(60, Math.max(40, Math.round((Number(profile?.expenses || 0) / Math.max(Number(profile?.income || 1), 1)) * 100)))),
-      invest: Math.round(Number(investmentPercentage || 0))
-    }
-  };
-}
-
 export default function AIPlan({ userProfile, shouldGenerate = false, allocations = [25, 25, 25, 25], investmentPercentage = 20 }) {
   const [loading, setLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -221,7 +162,9 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
             income: Number(userProfile?.income || 0),
             expenses: Number(userProfile?.expenses || 0),
             interests: Array.isArray(userProfile?.interests) ? userProfile.interests : [],
-            risk: userProfile?.risk || 'moderate'
+            risk: userProfile?.risk || 'moderate',
+            allocations: sanitizeAllocations(allocations),
+            investmentPercentage: Number(investmentPercentage || 0)
           })
         });
 
@@ -243,19 +186,20 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
           keyInsight: apiPlan?.key_insight || 'AI plan generated.',
           dominantTitle: 'Personalized Investment Strategy',
           trendSignals: (apiPlan?.investment_ideas || []).map(idea => idea.name),
-          dominantCategory: 'index',
+          dominantCategory: CATEGORY_ORDER.includes(apiPlan?.dominant_category) ? apiPlan.dominant_category : 'index',
           projectedText: apiPlan?.life_at_60_with_investing || 'Your financial future looks bright.',
           budgetBreakdown: {
             needs: apiPlan?.monthly_budget?.needs_percentage || 50,
             wants: apiPlan?.monthly_budget?.wants_percentage || 30,
             invest: apiPlan?.monthly_budget?.investment_percentage || 20
           },
+          categoryRecommendations: apiPlan?.asset_explorer_by_category || null,
           rawPlan: apiPlan // Store full plan for reference
         };
 
         console.log('AIPlan: Transformed plan:', transformedPlan);
         setPlan(transformedPlan);
-        setSelectedCategory('index');
+        setSelectedCategory(transformedPlan.dominantCategory);
       } catch (err) {
         if (err.name === 'AbortError') {
           return;
@@ -333,7 +277,8 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
 
   const budget = plan.budgetBreakdown || {};
   const trendSignals = plan.trendSignals || [];
-  const categoryRecommendations = marketRecommendations[selectedCategory] || [];
+  const recommendationsByCategory = plan.categoryRecommendations || defaultMarketRecommendations;
+  const categoryRecommendations = recommendationsByCategory[selectedCategory] || [];
 
   const handleResearch = (assetName) => {
     const query = `${assetName} investment India`;

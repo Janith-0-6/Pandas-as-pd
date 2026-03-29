@@ -116,7 +116,7 @@ app.post('/api/plan', async (req, res) => {
       });
     }
 
-    const { age, income, expenses, interests, risk } = req.body ?? {};
+    const { age, income, expenses, interests, risk, allocations, investmentPercentage } = req.body ?? {};
 
     if (
       !Number.isFinite(Number(age)) ||
@@ -125,12 +125,21 @@ app.post('/api/plan', async (req, res) => {
       !Array.isArray(interests) ||
       interests.length === 0 ||
       typeof risk !== 'string' ||
-      risk.trim().length === 0
+      risk.trim().length === 0 ||
+      !Array.isArray(allocations) ||
+      allocations.length !== 4 ||
+      !Number.isFinite(Number(investmentPercentage))
     ) {
       return res.status(400).json({
         error: 'Invalid request payload for generating plan.'
       });
     }
+
+    const safeAllocations = allocations.map((value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return 0;
+      return Math.max(0, Math.min(100, Math.round(numeric)));
+    });
 
     const prompt = `System Role:
 You are a professional wealth advisor targeting Gen Z in India. Give astute, practical advice and return pure JSON only.
@@ -141,6 +150,8 @@ Income: INR ${income}
 Baseline Monthly Expenses: INR ${expenses}
 Interests: ${interests.join(', ')}
 Risk Appetite: ${risk}
+Monthly Investment Percentage: ${Math.round(Number(investmentPercentage))}%
+Portfolio Allocations (Safe&Steady, Index, Gold, Equity): ${safeAllocations.join('% , ')}%
 
 Instructions:
 Create a tailored financial plan for this user taking into account their unique baseline expenses.
@@ -148,6 +159,7 @@ Mandatory personalization rules:
 - You MUST explicitly reference at least two of the exact selected interests by name in BOTH life_at_60_with_investing and life_at_60_without_investing.
 - You MUST avoid generic placeholders like "hobbies" or "lifestyle" when interests are available.
 - In each investment_ideas[i].why_suits_user, mention a concrete link to this user's data (risk appetite, income/expenses capacity, and/or selected interests).
+- Provide realistic India-specific options only.
 Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exact structure:
 {
   "monthly_budget": {
@@ -164,6 +176,13 @@ Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exac
       "min_monthly_amount": "string"
     }
   ],
+  "dominant_category": "fd | index | gold | equity",
+  "asset_explorer_by_category": {
+    "fd": [{ "name": "string", "tickerPlatform": "string", "beginnerExplanation": "string", "riskLevel": "Low | Moderate | High" }],
+    "index": [{ "name": "string", "tickerPlatform": "string", "beginnerExplanation": "string", "riskLevel": "Low | Moderate | High" }],
+    "gold": [{ "name": "string", "tickerPlatform": "string", "beginnerExplanation": "string", "riskLevel": "Low | Moderate | High" }],
+    "equity": [{ "name": "string", "tickerPlatform": "string", "beginnerExplanation": "string", "riskLevel": "Low | Moderate | High" }]
+  },
   "life_at_60_with_investing": "string (2 vivid sentences)",
   "life_at_60_without_investing": "string (2 vivid sentences)",
   "key_insight": "string (one punchy sentence)"
