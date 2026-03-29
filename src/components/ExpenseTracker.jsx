@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ReceiptIndianRupee, Plus, Trash2, Sparkles, Loader2, Lightbulb } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE_URL || '') : '';
 const LEGACY_EXPENSES_STORAGE_KEY = 'genz_expenses';
 
 const getExpensesStorageKey = (userId) => {

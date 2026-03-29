@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, BrainCircuit, Target, Lightbulb, ChevronRight, Sparkles, Rocket, ExternalLink } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.DEV ? (import.meta.env.VITE_API_BASE_URL || '') : '';
 
 const BUCKETS = [
   { id: 'fd', title: 'Safe & Steady (Digital FDs)', rate: 7 },
