@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Loader2, BrainCircuit, Target, Lightbulb, ChevronRight, Sparkles, Rocket, ExternalLink } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 const BUCKETS = [
   { id: 'fd', title: 'Safe & Steady (Digital FDs)', rate: 7 },
   { id: 'index', title: 'Wealth Building (Index Funds)', rate: 12 },
@@ -207,19 +209,54 @@ export default function AIPlan({ userProfile, shouldGenerate = false, allocation
         await new Promise((resolve) => setTimeout(resolve, refreshingExistingPlan ? 700 : 1100));
         if (controller.signal.aborted) return;
 
-        const insight = generateMarketInsights(allocations, userProfile, investmentPercentage);
-        setPlan(insight);
-        setSelectedCategory(insight.dominantCategory || 'fd');
+        const response = await fetch(`${API_BASE}/api/plan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            age: Number(userProfile?.age || 22),
+            income: Number(userProfile?.income || 0),
+            expenses: Number(userProfile?.expenses || 0),
+            interests: Array.isArray(userProfile?.interests) ? userProfile.interests : [],
+            risk: userProfile?.risk || 'moderate'
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `API error: ${response.status}`);
+        }
+
+        const { plan: apiPlan } = await response.json();
+
+        // Transform API response to match component structure
+        const transformedPlan = {
+          keyInsight: apiPlan?.key_insight || 'AI plan generated.',
+          dominantTitle: 'Personalized Investment Strategy',
+          trendSignals: (apiPlan?.investment_ideas || []).map(idea => idea.name),
+          dominantCategory: 'index',
+          projectedText: apiPlan?.life_at_60_with_investing || 'Your financial future looks bright.',
+          budgetBreakdown: {
+            needs: apiPlan?.monthly_budget?.needs_percentage || 50,
+            wants: apiPlan?.monthly_budget?.wants_percentage || 30,
+            invest: apiPlan?.monthly_budget?.investment_percentage || 20
+          },
+          rawPlan: apiPlan // Store full plan for reference
+        };
+
+        setPlan(transformedPlan);
+        setSelectedCategory('index');
       } catch (err) {
         if (err.name === 'AbortError') {
           return;
         }
 
-        console.error(err);
+        console.error('Plan fetch error:', err);
         if (!plan) {
           setPlan(null);
         }
-        setError(err.message || 'Failed to initialize AI allocation model.');
+        setError(err.message || 'Failed to generate AI plan. Check your internet connection.');
       } finally {
         setLoading(false);
         setIsRegenerating(false);
