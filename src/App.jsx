@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { supabase } from './lib/supabase';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';function App() {
@@ -6,6 +7,16 @@ import Dashboard from './components/Dashboard';function App() {
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
+    // Check if user is already logged in on page load
+    const checkActiveSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsLoggedIn(true);
+        window.history.replaceState({ screen: 'onboarding', isLoggedIn: true }, '', '/setup');
+      }
+    };
+    checkActiveSession();
+
     const handlePopState = (event) => {
       const state = event.state;
       if (state?.screen === 'dashboard' && state?.userProfile) {

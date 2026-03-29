@@ -1,13 +1,47 @@
 import { useState } from 'react';
-import { ArrowRight, Lock } from 'lucide-react';
+import { ArrowRight, Lock, UserPlus, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Login({ onLogin }) {
-  const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (credentials.username && credentials.password) {
-      onLogin(); // Mock login bypassing real auth
+    setErrorMsg('');
+    setSuccessMsg('');
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email: credentials.email,
+          password: credentials.password,
+        });
+
+        if (error) throw error;
+        setSuccessMsg('Account created! You are now logged in.');
+        
+        // Short delay to let user see success message before navigating
+        setTimeout(() => {
+          onLogin();
+        }, 1500);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
+        });
+
+        if (error) throw error;
+        onLogin();
+      }
+    } catch (error) {
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -26,17 +60,32 @@ export default function Login({ onLogin }) {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="w-full space-y-6 glass-card p-6 md:p-8 rounded-3xl animate-reveal soft-outline" style={{ animationDelay: '0.2s' }}>
+      <form onSubmit={handleSubmit} className="w-full space-y-5 glass-card p-6 md:p-8 rounded-3xl animate-reveal soft-outline" style={{ animationDelay: '0.2s' }}>
         
+        {errorMsg && (
+          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl flex items-start gap-3 text-sm animate-fade-in">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <p>{errorMsg}</p>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-xl flex items-start gap-3 text-sm animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+            <p>{successMsg}</p>
+          </div>
+        )}
+
         <div className="group">
-          <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Username</label>
+          <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Email Address</label>
           <input 
-            type="text" 
+            type="email" 
             placeholder="investor@future.com"
             className="w-full bg-black/30 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500"
-            value={credentials.username}
-            onChange={e => setCredentials({...credentials, username: e.target.value})}
+            value={credentials.email}
+            onChange={e => setCredentials({...credentials, email: e.target.value})}
             required
+            disabled={loading}
           />
         </div>
 
@@ -49,16 +98,33 @@ export default function Login({ onLogin }) {
             value={credentials.password}
             onChange={e => setCredentials({...credentials, password: e.target.value})}
             required
+            disabled={loading}
           />
         </div>
 
-        <div className="pt-2">
+        <div className="pt-2 flex flex-col sm:flex-row gap-3">
           <button 
             type="submit"
-            disabled={!credentials.username || !credentials.password}
-            className="w-full group relative flex items-center justify-center gap-3 bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950 font-semibold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 overflow-hidden"
+            disabled={!credentials.email || !credentials.password || loading}
+            onClick={() => setIsSignUp(false)}
+            className={`flex-1 group relative flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
+              !isSignUp ? 'bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950' : 'bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10'
+            }`}
           >
-            <span className="relative z-10 flex items-center gap-2">Authorize Portal <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" /></span>
+            <LogIn className="w-4 h-4" />
+            Log In
+          </button>
+
+          <button 
+            type="submit"
+            disabled={!credentials.email || !credentials.password || loading}
+            onClick={() => setIsSignUp(true)}
+            className={`flex-1 group relative flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
+              isSignUp ? 'bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950' : 'bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            Create Account
           </button>
         </div>
 
@@ -66,3 +132,5 @@ export default function Login({ onLogin }) {
     </div>
   );
 }
+
+// Add the missing icon to the file top inside the scope of the rewrite. Wait, I didn't import CheckCircle2.
