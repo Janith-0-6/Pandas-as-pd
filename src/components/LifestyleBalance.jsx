@@ -113,6 +113,7 @@ export default function LifestyleBalance({ userProfile, investmentPercentage, on
           <span className="text-xs uppercase tracking-widest font-bold text-neutral-300">Investment Allocation</span>
           <div className="text-right">
             <span className="text-brand-light font-semibold bg-brand-accent/15 py-1 px-3 rounded text-lg border border-brand-accent/30">{investmentPercentage}%</span>
+            <p className="text-[11px] text-neutral-400 font-mono mt-1">₹{Math.round(monthlyInvestment).toLocaleString('en-IN')}/mo</p>
           </div>
         </div>
         <input 

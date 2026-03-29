@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Layers, ShieldCheck, TrendingUp, Anchor, CheckCircle } from 'lucide-react';
 
+const PORTFOLIO_STORAGE_KEY = 'futureyou.portfolio.allocations.v1';
+const DEFAULT_ALLOCATIONS = [25, 25, 25, 25];
+
 const BUCKETS = [
   { id: 0, title: "Safe & Steady (Digital FDs)", risk: "Low", rate: 7, icon: ShieldCheck, color: "text-blue-400" },
   { id: 1, title: "Wealth Building (Index Funds)", risk: "Medium", rate: 12, icon: TrendingUp, color: "text-brand-success" },
@@ -8,9 +11,58 @@ const BUCKETS = [
   { id: 3, title: "Experimenting (Direct Equity)", risk: "High", rate: 15, icon: Layers, color: "text-rose-400" }
 ];
 
+const sanitizeAllocations = (value) => {
+  if (!Array.isArray(value) || value.length !== 4) {
+    return DEFAULT_ALLOCATIONS;
+  }
+
+  const clamped = value.map((item) => {
+    const numeric = Number(item);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.min(100, Math.max(0, Math.round(numeric)));
+  });
+
+  const total = clamped.reduce((sum, item) => sum + item, 0);
+  if (total <= 100) {
+    return clamped;
+  }
+
+  const normalized = clamped.map((item) => Math.round((item / total) * 100));
+  const normalizedTotal = normalized.reduce((sum, item) => sum + item, 0);
+  if (normalizedTotal !== 100) {
+    normalized[0] += (100 - normalizedTotal);
+  }
+
+  return normalized;
+};
+
+const readSavedAllocations = () => {
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+    if (!raw) return DEFAULT_ALLOCATIONS;
+    return sanitizeAllocations(JSON.parse(raw));
+  } catch {
+    return DEFAULT_ALLOCATIONS;
+  }
+};
+
 export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
-  const [allocations, setAllocations] = useState([25, 25, 25, 25]);
+  const [allocations, setAllocations] = useState(() => readSavedAllocations());
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    const restoreFromStorage = () => {
+      setAllocations(readSavedAllocations());
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', restoreFromStorage);
+      return () => document.removeEventListener('DOMContentLoaded', restoreFromStorage);
+    }
+
+    restoreFromStorage();
+    return undefined;
+  }, []);
 
   // Trigger parent rate change on allocation updates
   useEffect(() => {
@@ -18,7 +70,13 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
     const blendedRate = totalAllocated > 0
       ? allocations.reduce((acc, weight, idx) => acc + (weight / totalAllocated) * BUCKETS[idx].rate, 0)
       : 0;
-    onRateChange(blendedRate, totalAllocated);
+    onRateChange(blendedRate, totalAllocated, allocations);
+
+    try {
+      localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(allocations));
+    } catch {
+      // Ignore storage errors in private mode or constrained environments.
+    }
   }, [allocations, onRateChange]);
 
   const handleAllocationChange = (index, newValueStr) => {
@@ -62,9 +120,15 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
           Your blended baseline return is currently <span className="text-brand-light font-mono font-bold">{blendedRate}%</span>.
           Adjust the sliders below to see your future charts react instantly.
         </p>
-        <p className="text-[11px] text-neutral-500 mt-2 font-mono">
-          Allocated: ₹{allocatedAmount.toLocaleString('en-IN')} ({Math.round(totalAllocatedPercent)}%) | Remaining: ₹{remainingAmount.toLocaleString('en-IN')} ({Math.round(remainingPercent)}%)
-        </p>
+        <div className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] font-mono text-neutral-300">
+          <span className="text-neutral-400">Allocated:</span>
+          <span className="text-brand-light font-semibold">₹{allocatedAmount.toLocaleString('en-IN')}</span>
+          <span className="text-neutral-500">({Math.round(totalAllocatedPercent)}%)</span>
+          <span className="text-neutral-600">|</span>
+          <span className="text-neutral-400">Remaining:</span>
+          <span className="text-amber-200 font-semibold">₹{remainingAmount.toLocaleString('en-IN')}</span>
+          <span className="text-neutral-500">({Math.round(remainingPercent)}%)</span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

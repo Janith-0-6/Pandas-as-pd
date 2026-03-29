@@ -1,12 +1,60 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import OpenAI from 'openai';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8787;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
-const AI_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+async function generateGeminiJson(prompt) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.35,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const upstreamBody = await response.text().catch(() => '');
+    throw new Error(`Gemini HTTP ${response.status}: ${upstreamBody || 'unknown upstream error'}`);
+  }
+
+  const payload = await response.json();
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part) => part?.text || '')
+    .join('')
+    .trim();
+
+  if (!text) {
+    throw new Error('Gemini returned an empty response.');
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Gemini response did not include valid JSON.');
+    }
+    return JSON.parse(jsonMatch[0]);
+  }
+}
 
 app.use(
   cors({
@@ -37,10 +85,9 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/plan', async (req, res) => {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (!GEMINI_API_KEY) {
       return res.status(500).json({
-        error: 'Missing OPENAI_API_KEY on the backend environment.'
+        error: 'Missing GEMINI_API_KEY on the backend environment.'
       });
     }
 
@@ -60,12 +107,10 @@ app.post('/api/plan', async (req, res) => {
       });
     }
 
-    const openai = new OpenAI({ 
-      apiKey,
-      baseURL: 'https://openrouter.ai/api/v1'
-    });
+    const prompt = `System Role:
+You are a professional wealth advisor targeting Gen Z in India. Give astute, practical advice and return pure JSON only.
 
-    const prompt = `User Data:
+User Data:
 Age: ${age}
 Income: INR ${income}
 Baseline Monthly Expenses: INR ${expenses}
@@ -99,47 +144,97 @@ Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exac
   "key_insight": "string (one punchy sentence)"
 }`;
 
-    const msg = await openai.chat.completions.create({
-      model: AI_MODEL,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: 'You are a professional wealth advisor targeting Gen Z. Give astute, sharp advice. Return pure JSON.' },
-        { role: 'user', content: prompt }
-      ]
-    });
-
-    const text = msg.choices?.[0]?.message?.content ?? '';
-    if (!text || typeof text !== 'string') {
-      return res.status(502).json({ error: 'AI provider returned an empty response.' });
-    }
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      return res.status(502).json({ error: 'AI response did not include valid JSON.' });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(jsonMatch[0]);
-    } catch {
-      return res.status(502).json({ error: 'AI response JSON could not be parsed.' });
-    }
+    const data = await generateGeminiJson(prompt);
 
     return res.json({ plan: data });
   } catch (error) {
-    const upstreamMessage = error?.error?.message || error?.message || null;
-    const status = Number(error?.status);
+    const upstreamMessage = error?.message || null;
 
     console.error('Plan generation failed:', {
-      status: Number.isFinite(status) ? status : 'unknown',
       message: upstreamMessage
     });
 
     return res.status(502).json({
       error: upstreamMessage
-        ? `AI provider error: ${upstreamMessage}`
+        ? `Gemini provider error: ${upstreamMessage}`
         : 'Failed to generate plan from AI model.'
+    });
+  }
+});
+
+app.post('/api/expense-insights', async (req, res) => {
+  try {
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({
+        error: 'Missing GEMINI_API_KEY on the backend environment.'
+      });
+    }
+
+    const { income, baselineExpenses, expenses } = req.body ?? {};
+
+    if (!Array.isArray(expenses) || expenses.length === 0) {
+      return res.status(400).json({
+        error: 'Please provide at least one expense entry.'
+      });
+    }
+
+    const sanitizedExpenses = expenses
+      .map((item) => ({
+        category: typeof item?.category === 'string' ? item.category.trim() : '',
+        amount: Number(item?.amount)
+      }))
+      .filter((item) => item.category && Number.isFinite(item.amount) && item.amount > 0);
+
+    if (sanitizedExpenses.length === 0) {
+      return res.status(400).json({
+        error: 'Expense entries must include valid category and amount values.'
+      });
+    }
+
+    const expenseLines = sanitizedExpenses
+      .map((item) => `- ${item.category}: INR ${Math.round(item.amount)}`)
+      .join('\n');
+
+    const prompt = `System Role:
+You are a practical personal finance coach for users in India. Be specific, realistic, and concise. Return pure JSON only.
+
+User Financial Context:
+Monthly Income: INR ${Number.isFinite(Number(income)) ? Math.round(Number(income)) : 'unknown'}
+Baseline Essential Expenses: INR ${Number.isFinite(Number(baselineExpenses)) ? Math.round(Number(baselineExpenses)) : 'unknown'}
+
+Tracked Expenses:
+${expenseLines}
+
+Instructions:
+Analyze these expenses and provide practical, realistic savings suggestions for a young investor in India.
+Do NOT suggest impossible cuts. Prioritize actions that can be implemented this month.
+Output ONLY valid JSON in this exact shape:
+{
+  "overall_observation": "string",
+  "savings_opportunities": [
+    {
+      "category": "string",
+      "advice": "string",
+      "estimated_monthly_savings_inr": number
+    }
+  ],
+  "quick_actions": ["string", "string", "string"]
+}`;
+
+    const insights = await generateGeminiJson(prompt);
+
+    return res.json({ insights });
+  } catch (error) {
+    const upstreamMessage = error?.message || null;
+
+    console.error('Expense insights failed:', {
+      message: upstreamMessage
+    });
+
+    return res.status(502).json({
+      error: upstreamMessage
+        ? `Gemini provider error: ${upstreamMessage}`
+        : 'Failed to generate expense insights from AI model.'
     });
   }
 });

@@ -1,14 +1,189 @@
 import { useState, useEffect } from 'react';
-import { Loader2, TrendingUp, BrainCircuit, Target, Lightbulb, ChevronRight } from 'lucide-react';
+import { Loader2, BrainCircuit, Target, Lightbulb, ChevronRight, Sparkles, Rocket, ExternalLink } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const BUCKETS = [
+  { id: 'fd', title: 'Safe & Steady (Digital FDs)', rate: 7 },
+  { id: 'index', title: 'Wealth Building (Index Funds)', rate: 12 },
+  { id: 'gold', title: 'Diversifier (Digital Gold)', rate: 9 },
+  { id: 'equity', title: 'Experimenting (Direct Equity)', rate: 15 }
+];
 
-export default function AIPlan({ userProfile, shouldGenerate = false }) {
+const PORTFOLIO_STORAGE_KEY = 'futureyou.portfolio.allocations.v1';
+
+const CATEGORY_ORDER = ['fd', 'index', 'gold', 'equity'];
+
+const CATEGORY_LABELS = {
+  fd: 'Safe & Steady',
+  index: 'Wealth Building',
+  gold: 'Diversifier',
+  equity: 'Experimenting'
+};
+
+const marketRecommendations = {
+  fd: [
+    {
+      name: 'High-Yield Digital FDs',
+      tickerPlatform: 'Platform: Stable Money',
+      beginnerExplanation: 'Zero stress, guaranteed returns. Perfect for emergency funds and peace-of-mind mode.',
+      riskLevel: 'Low'
+    },
+    {
+      name: 'Post Office Time Deposits',
+      tickerPlatform: 'Platform: India Post',
+      beginnerExplanation: 'Old-school but solid. Predictable returns, no drama, pure stability energy.',
+      riskLevel: 'Low'
+    }
+  ],
+  index: [
+    {
+      name: 'Nifty 50 ETF',
+      tickerPlatform: 'Ticker: NIFTYBEES',
+      beginnerExplanation: "Buying a tiny slice of India\'s top 50 companies. The ultimate set-it-and-forget-it wealth hack.",
+      riskLevel: 'Moderate'
+    },
+    {
+      name: 'Sensex Index Funds',
+      tickerPlatform: 'Category: Index Mutual Fund',
+      beginnerExplanation: 'Broader large-cap exposure with low effort. Just stay consistent and let compounding cook.',
+      riskLevel: 'Moderate'
+    }
+  ],
+  gold: [
+    {
+      name: 'Sovereign Gold Bonds (SGBs)',
+      tickerPlatform: 'Issuer: RBI / Govt. of India',
+      beginnerExplanation: 'Gold, but without locker fees. Plus, the government pays you extra interest. Big W hedge.',
+      riskLevel: 'Low/Moderate'
+    },
+    {
+      name: 'Digital Gold SIPs',
+      tickerPlatform: 'Platform: Trusted Digital Gold Apps',
+      beginnerExplanation: 'Small monthly gold stacking with no jewellery making charges. Flex and hedge together.',
+      riskLevel: 'Low/Moderate'
+    }
+  ],
+  equity: [
+    {
+      name: 'Tata Motors',
+      tickerPlatform: 'Ticker: TATAMOTORS',
+      beginnerExplanation: 'High risk, high reward zone. Do your homework before buying the dip, no blind FOMO.',
+      riskLevel: 'High'
+    },
+    {
+      name: 'Reliance Industries',
+      tickerPlatform: 'Ticker: RELIANCE',
+      beginnerExplanation: 'Blue-chip heavyweight with multiple growth engines, but still equity risk is real.',
+      riskLevel: 'High'
+    },
+    {
+      name: 'Tech Smallcases',
+      tickerPlatform: 'Platform: Smallcase',
+      beginnerExplanation: 'Thematic growth basket play. High-volatility ride, so position sizing matters a lot.',
+      riskLevel: 'High'
+    }
+  ]
+};
+
+const formatCompactINR = (value) => {
+  const val = Number(value) || 0;
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
+  if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
+  return `₹${Math.round(val).toLocaleString('en-IN')}`;
+};
+
+const sanitizeAllocations = (allocations) => {
+  if (!Array.isArray(allocations) || allocations.length !== 4) return [25, 25, 25, 25];
+  return allocations.map((value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, Math.min(100, Math.round(numeric)));
+  });
+};
+
+function generateMarketInsights(allocations, profile, investmentPercentage) {
+  const safeAllocations = sanitizeAllocations(allocations);
+  const maxAllocation = Math.max(...safeAllocations);
+  const dominantIndex = safeAllocations.findIndex((value) => value === maxAllocation);
+  const dominantBucket = BUCKETS[dominantIndex] || BUCKETS[1];
+
+  const totalAllocated = safeAllocations.reduce((sum, value) => sum + value, 0);
+  const weightedRate = totalAllocated > 0
+    ? safeAllocations.reduce((sum, value, idx) => sum + (value / totalAllocated) * BUCKETS[idx].rate, 0)
+    : 10;
+
+  const monthlyInvestment = (Number(profile?.income || 0) * Number(investmentPercentage || 0)) / 100;
+  const investedContribution = monthlyInvestment * (totalAllocated / 100);
+  const yearsTo60 = Math.max(1, 60 - Number(profile?.age || 22));
+  const months = yearsTo60 * 12;
+  const monthlyRate = weightedRate / 100 / 12;
+  const projectedAt60 = monthlyRate > 0
+    ? investedContribution * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate)
+    : investedContribution * months;
+
+  const suggestionsByBucket = {
+    equity: {
+      trendTitle: 'High-Risk Equity Energy',
+      trendSignals: ['Defence/Railway PSU stocks', 'Tech-heavy Smallcases', 'Nifty Next 50 Index'],
+      vibe: `No cap, this is main-character energy. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 🚀 Your money can do overtime while you stay in your growth era.`
+    },
+    fd: {
+      trendTitle: 'Low-Risk Stability Mode',
+      trendSignals: ['High-yield digital FDs via Stable Money', 'P2P lending for inflation-beating returns', 'Laddered fixed-income stack'],
+      vibe: `W risk control. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 🌿 You're securing the soft life without entering panic mode.`
+    },
+    gold: {
+      trendTitle: 'Diversifier Gold Stack',
+      trendSignals: ['Sovereign Gold Bonds (SGBs) for tax-free maturity', 'Digital Gold SIPs', 'Gold ETF allocation for liquidity'],
+      vibe: `Portfolio looking balanced and unbothered. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 💫 You're avoiding the broke era with hedge power.`
+    },
+    index: {
+      trendTitle: 'Core Index Compounding',
+      trendSignals: ['Nifty 50 ETF core allocation', 'Sensex Index funds for broad-market exposure', 'Nifty Next 50 tactical tilt'],
+      vibe: `This is a W portfolio path. Projected Net Worth: ${formatCompactINR(projectedAt60)}. 📈 Slow and steady but still elite over the long run.`
+    }
+  };
+
+  const dominant = suggestionsByBucket[dominantBucket.id] || suggestionsByBucket.index;
+
+  return {
+    keyInsight: `${dominant.trendTitle}: ${Math.round(maxAllocation)}% allocation is leading your strategy right now.`,
+    dominantTitle: dominant.trendTitle,
+    trendSignals: dominant.trendSignals,
+    dominantCategory: dominantBucket.id,
+    projectedText: dominant.vibe,
+    budgetBreakdown: {
+      needs: Math.min(60, Math.max(40, Math.round((Number(profile?.expenses || 0) / Math.max(Number(profile?.income || 1), 1)) * 100))),
+      wants: Math.max(15, 100 - Math.round(Number(investmentPercentage || 0)) - Math.min(60, Math.max(40, Math.round((Number(profile?.expenses || 0) / Math.max(Number(profile?.income || 1), 1)) * 100)))),
+      invest: Math.round(Number(investmentPercentage || 0))
+    }
+  };
+}
+
+export default function AIPlan({ userProfile, shouldGenerate = false, allocations = [25, 25, 25, 25], investmentPercentage = 20 }) {
   const [loading, setLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
   const [requestVersion, setRequestVersion] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState('fd');
+
+  const safeAllocations = sanitizeAllocations(allocations);
+  const monthlyInvestment = (Number(userProfile?.income || 0) * Number(investmentPercentage || 0)) / 100;
+
+  const getSavedAllocations = () => {
+    try {
+      const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+      if (!raw) return safeAllocations;
+      return sanitizeAllocations(JSON.parse(raw));
+    } catch {
+      return safeAllocations;
+    }
+  };
+
+  const savedAllocations = getSavedAllocations();
+  const selectedIndex = CATEGORY_ORDER.indexOf(selectedCategory);
+  const selectedPercentage = selectedIndex >= 0 ? savedAllocations[selectedIndex] : 0;
+  const selectedAmount = Math.round((selectedPercentage / 100) * monthlyInvestment);
 
   useEffect(() => {
     if (!shouldGenerate) {
@@ -29,28 +204,12 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
       setError(null);
 
       try {
-        const response = await fetch(`${API_BASE}/api/plan`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            age: userProfile.age,
-            income: userProfile.income,
-            expenses: userProfile.expenses,
-            interests: userProfile.interests,
-            risk: userProfile.risk
-          })
-        });
+        await new Promise((resolve) => setTimeout(resolve, refreshingExistingPlan ? 700 : 1100));
+        if (controller.signal.aborted) return;
 
-        const payload = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(payload.error || 'Failed to generate financial plan.');
-        }
-
-        setPlan(payload.plan);
+        const insight = generateMarketInsights(allocations, userProfile, investmentPercentage);
+        setPlan(insight);
+        setSelectedCategory(insight.dominantCategory || 'fd');
       } catch (err) {
         if (err.name === 'AbortError') {
           return;
@@ -70,7 +229,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
     fetchPlan();
 
     return () => controller.abort();
-  }, [userProfile, requestVersion, shouldGenerate]);
+  }, [userProfile, requestVersion, shouldGenerate, allocations, investmentPercentage]);
 
   const triggerRegenerate = () => {
     if (loading || isRegenerating) {
@@ -97,9 +256,9 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
       <div className="glass-card rounded-3xl p-10 flex flex-col items-center justify-center min-h-[400px] text-center border-white/10">
         <Loader2 className="h-8 w-8 text-neutral-400 animate-spin mb-6" />
         <h3 className="text-xl font-light text-neutral-200 tracking-wide animate-pulse">
-          Synthesizing Portfolio Strategy
+          Cooking Your Market Gameplan
         </h3>
-        <p className="text-neutral-400 mt-3 text-sm font-mono uppercase tracking-[0.1em]">Processing demographic and risk variables...</p>
+        <p className="text-neutral-400 mt-3 text-sm font-mono uppercase tracking-[0.1em]">Running simulated market vibes + allocation checks...</p>
       </div>
     );
   }
@@ -126,9 +285,14 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
 
   if (!plan) return null;
 
-  // Protect against malformed JSON structure causing React to crash (White Screen)
-  const budget = plan.monthly_budget || {};
-  const ideas = plan.investment_ideas || [];
+  const budget = plan.budgetBreakdown || {};
+  const trendSignals = plan.trendSignals || [];
+  const categoryRecommendations = marketRecommendations[selectedCategory] || [];
+
+  const handleResearch = (assetName) => {
+    const query = `${assetName} investment India`;
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+  };
 
   return (
     <div className="glass-card rounded-3xl overflow-hidden relative group">
@@ -147,7 +311,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
             className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg border border-white/20 text-[10px] uppercase tracking-[0.12em] font-semibold text-neutral-200 hover:border-brand-light/50 hover:text-brand-light transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isRegenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-            {isRegenerating ? 'Regenerating...' : 'Regenerate Plan'}
+            {isRegenerating ? 'Rechecking Trends...' : 'Regenerate Plan'}
           </button>
         </div>
 
@@ -157,71 +321,117 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
           </div>
         ) : null}
 
-        <div className="bg-black/35 border-l-2 border-brand-light p-5 mb-8 rounded-r-xl">
-          <div className="flex gap-3">
+        <div className="bg-black/35 border-l-2 border-brand-light p-5 mb-6 rounded-r-xl">
+          <div className="flex gap-3 items-start">
             <Lightbulb className="text-brand-accent h-4 w-4 shrink-0 mt-1" />
-            <p className="text-neutral-200 text-sm md:text-base font-light tracking-wide leading-relaxed">
-              "{plan.key_insight}"
-            </p>
-          </div>
-        </div>
-
-        <div className="mb-10">
-          <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4">Capital Allocation Protocol</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 bg-black/30 rounded-lg p-2 border border-white/10 gap-2">
-            <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition rounded-l-md">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Needs</p>
-              <p className="text-lg font-mono text-neutral-100">{budget.needs_percentage || 50}%</p>
-            </div>
-            <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Wants</p>
-              <p className="text-lg font-mono text-neutral-100">{budget.wants_percentage || 30}%</p>
-            </div>
-            <div className="flex-1 px-4 py-2 text-center group/item hover:bg-white/5 transition">
-              <p className="text-[10px] uppercase tracking-wider text-neutral-400 mb-1">Liquidity</p>
-              <p className="text-lg font-mono text-neutral-100">{budget.savings_percentage || 10}%</p>
-            </div>
-            <div className="flex-1 px-4 py-2 text-center bg-brand-accent/10 border border-brand-accent/30 rounded-md">
-              <p className="text-[10px] uppercase tracking-wider text-brand-light font-bold mb-1">Assets</p>
-              <p className="text-lg font-mono text-brand-light font-semibold">{budget.investment_percentage || 10}%</p>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-400 font-semibold mb-2">Insight Drop</p>
+              <p className="text-neutral-100 text-sm md:text-base font-light tracking-wide leading-relaxed">
+                {plan.keyInsight}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Missing Output Rendered: Life at 60 Comparison */}
-        {(plan.life_at_60_with_investing || plan.life_at_60_without_investing) && (
-          <div className="mb-10">
-            <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4">Life at 60 Projection</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-black/20 rounded-xl border border-white/5">
-                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest mb-2">Without Investing</p>
-                <p className="text-xs text-neutral-400 leading-relaxed font-light">{plan.life_at_60_without_investing || "Standard retirement timeline with high inflation vulnerability."}</p>
-              </div>
-              <div className="p-4 bg-brand-accent/5 rounded-xl border border-brand-accent/20">
-                <p className="text-[10px] font-bold text-brand-light uppercase tracking-widest mb-2">With Strategy</p>
-                <p className="text-xs text-neutral-200 leading-relaxed font-light">{plan.life_at_60_with_investing || "Early financial independence and robust wealth accumulation."}</p>
-              </div>
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500 mb-1">Needs Lane</p>
+            <p className="text-xl text-neutral-100 font-mono">{budget.needs || 50}%</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-neutral-500 mb-1">Wants Lane</p>
+            <p className="text-xl text-neutral-100 font-mono">{budget.wants || 30}%</p>
+          </div>
+          <div className="rounded-xl border border-brand-accent/25 bg-brand-accent/10 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-brand-light/80 mb-1">Invest Lane</p>
+            <p className="text-xl text-brand-light font-mono">{budget.invest || 20}%</p>
+          </div>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-cyan-300/20 bg-cyan-400/5 p-5">
+          <div className="flex items-start gap-3">
+            <Rocket className="w-5 h-5 text-cyan-300 mt-0.5" />
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-cyan-200/80 font-semibold mb-2">Future Life At Age 60</p>
+              <p className="text-sm md:text-base leading-relaxed text-neutral-100">
+                {plan.projectedText}
+              </p>
             </div>
           </div>
-        )}
+        </div>
 
-        <div>
-          <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4">Recommended Vehicles</h3>
-          <div className="space-y-3">
-            {ideas.map((idea, idx) => (
-              <div key={idx} className="p-5 bg-black/25 rounded-xl border border-white/10 hover:border-brand-accent/40 transition-all hover:bg-black/40 group/card cursor-default">
-                <div className="flex justify-between items-start mb-2 gap-4">
-                  <span className="font-semibold text-neutral-100 text-sm group-hover/card:text-brand-light transition">{idea.name}</span>
-                  <span className="bg-brand-success/10 border border-brand-success/30 text-[10px] px-2 py-1 rounded text-brand-success font-mono shrink-0 flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3" /> {idea.expected_annual_return} Target
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-300 leading-relaxed mb-4 font-light">{idea.why_suits_user}</p>
-                <div className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-widest text-neutral-400">
-                  <ChevronRight className="w-3 h-3 text-brand-accent" /> Entry: <span className="text-neutral-200 font-mono ml-1">{idea.min_monthly_amount}</span>
-                </div>
+        <div className="mb-5 rounded-xl border border-white/10 bg-black/25 p-4">
+          <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-3 flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-brand-light" /> Current Trend Calls
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {trendSignals.map((trend, idx) => (
+              <div key={`${trend}-${idx}`} className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-neutral-200 leading-relaxed">
+                <span className="mr-1">📌</span>{trend}
               </div>
             ))}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-[10px] uppercase font-bold text-neutral-400 tracking-[0.15em] mb-4 flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-brand-light" /> Beginner Asset Explorer
+          </h3>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {CATEGORY_ORDER.map((categoryId) => (
+              <button
+                key={categoryId}
+                type="button"
+                onClick={() => setSelectedCategory(categoryId)}
+                className={`px-3 py-2 rounded-lg text-[10px] uppercase tracking-[0.12em] font-semibold border transition ${
+                  selectedCategory === categoryId
+                    ? 'bg-brand-accent/15 border-brand-light/40 text-brand-light'
+                    : 'bg-black/25 border-white/10 text-neutral-300 hover:bg-black/45 hover:border-white/25'
+                }`}
+              >
+                {CATEGORY_LABELS[categoryId]}
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 mb-4 text-sm leading-relaxed text-neutral-200">
+            You have <span className="font-semibold text-brand-light">₹{selectedAmount.toLocaleString('en-IN')}</span> allocated for <span className="font-semibold">{CATEGORY_LABELS[selectedCategory]}</span>.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {categoryRecommendations.map((item, idx) => (
+              <div
+                key={`${item.name}-${idx}`}
+                className="p-4 md:p-5 bg-black/25 rounded-xl border border-white/10 hover:border-brand-accent/40 transition-all duration-200 hover:bg-black/40 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(8,14,28,0.45)]"
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm text-neutral-100 font-semibold leading-relaxed">{item.name}</p>
+                    <p className="text-[11px] text-neutral-400 mt-1">{item.tickerPlatform}</p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.12em] font-semibold px-2 py-1 rounded border border-white/15 bg-black/35 text-neutral-300">
+                    {item.riskLevel} Risk
+                  </span>
+                </div>
+
+                <p className="text-xs md:text-sm text-neutral-300 leading-relaxed mb-4">
+                  {item.beginnerExplanation}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => handleResearch(item.name)}
+                  className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.13em] font-bold text-brand-light hover:text-cyan-300 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Research this
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 rounded-lg border border-amber-200/15 bg-amber-100/[0.04] px-3.5 py-3 text-[11px] text-amber-100/80 leading-relaxed">
+            Not financial advice. Just a hackathon demo built to help you learn! Always do your own research (DYOR).
           </div>
         </div>
       </div>

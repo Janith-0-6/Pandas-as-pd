@@ -1,16 +1,54 @@
 import { useEffect, useState } from 'react';
 import LifestyleBalance from './LifestyleBalance';
 import AIPlan from './AIPlan';
-import Gamification from './Gamification';
 import PortfolioBuilder from './PortfolioBuilder';
-import { Activity, ShieldCheck, Home, LineChart, BrainCircuit, ArrowRight } from 'lucide-react';
+import { Activity, ShieldCheck, LineChart, BrainCircuit, ArrowRight, Pencil, ChevronDown, SlidersHorizontal } from 'lucide-react';
 
-export default function Dashboard({ userProfile, onReset }) {
+const PORTFOLIO_STORAGE_KEY = 'futureyou.portfolio.allocations.v1';
+const DEFAULT_ALLOCATIONS = [25, 25, 25, 25];
+const BUCKET_RATES = [7, 12, 9, 15];
+
+const readSavedAllocations = () => {
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+    if (!raw) return DEFAULT_ALLOCATIONS;
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length !== 4) return DEFAULT_ALLOCATIONS;
+
+    return parsed.map((value) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return 0;
+      return Math.max(0, Math.min(100, Math.round(numeric)));
+    });
+  } catch {
+    return DEFAULT_ALLOCATIONS;
+  }
+};
+
+const derivePortfolioMeta = (allocations) => {
+  const totalAllocated = allocations.reduce((sum, item) => sum + item, 0);
+  const blendedRate = totalAllocated > 0
+    ? allocations.reduce((sum, weight, idx) => sum + (weight / totalAllocated) * BUCKET_RATES[idx], 0)
+    : 0;
+
+  return {
+    blendedRate,
+    allocatedPercentage: totalAllocated
+  };
+};
+
+export default function Dashboard({ userProfile, onEditAnswers }) {
+  const savedAllocations = readSavedAllocations();
+  const initialPortfolioMeta = derivePortfolioMeta(savedAllocations);
+
   const [activeView, setActiveView] = useState('present');
   const [planRequested, setPlanRequested] = useState(false);
   const [investmentPercentage, setInvestmentPercentage] = useState(20);
-  const [blendedRate, setBlendedRate] = useState(10.75);
-  const [allocatedPercentage, setAllocatedPercentage] = useState(100);
+  const [blendedRate, setBlendedRate] = useState(initialPortfolioMeta.blendedRate || 10.75);
+  const [allocatedPercentage, setAllocatedPercentage] = useState(initialPortfolioMeta.allocatedPercentage || 100);
+  const [portfolioAllocations, setPortfolioAllocations] = useState(savedAllocations);
+  const [showEditMenu, setShowEditMenu] = useState(false);
 
   useEffect(() => {
     setActiveView('present');
@@ -20,14 +58,20 @@ export default function Dashboard({ userProfile, onReset }) {
     setAllocatedPercentage(100);
   }, [userProfile]);
 
-  const handlePortfolioRateChange = (rate, allocationPercent = 100) => {
+  const handlePortfolioRateChange = (rate, allocationPercent = 100, allocations = DEFAULT_ALLOCATIONS) => {
     setBlendedRate(rate);
     setAllocatedPercentage(allocationPercent);
+    setPortfolioAllocations(allocations);
   };
 
   const showPlanPage = () => {
     setPlanRequested(true);
     setActiveView('plan');
+  };
+
+  const handleEditAnswersClick = () => {
+    setShowEditMenu(false);
+    onEditAnswers();
   };
 
   return (
@@ -56,14 +100,30 @@ export default function Dashboard({ userProfile, onReset }) {
               <p className="text-2xl font-mono text-white tracking-tight">INR {Number(userProfile.income).toLocaleString()}</p>
             </div>
           </div>
-          <button
-            onClick={onReset}
-            className="flex items-center gap-2 px-5 py-3 bg-black/30 backdrop-blur-sm rounded-2xl border border-white/10 hover:border-brand-light/40 text-neutral-300 hover:text-brand-light transition-all duration-300 shadow-[0_14px_30px_rgba(4,8,16,0.3)] font-medium"
-            title="Go back to home/onboarding"
-          >
-            <Home className="h-4 w-4" />
-            <span className="hidden md:inline text-sm">Home</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowEditMenu((prev) => !prev)}
+              className="flex items-center gap-2 px-5 py-3 bg-black/30 backdrop-blur-sm rounded-2xl border border-white/10 hover:border-brand-light/40 text-neutral-300 hover:text-brand-light transition-all duration-300 shadow-[0_14px_30px_rgba(4,8,16,0.3)] font-medium"
+              title="Edit profile or financial inputs"
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="hidden md:inline text-sm">Edit</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showEditMenu ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showEditMenu ? (
+              <div className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 bg-slate-950/95 backdrop-blur-md shadow-2xl z-20 p-1.5">
+                <button
+                  type="button"
+                  onClick={handleEditAnswersClick}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm text-neutral-200 hover:bg-white/10 transition"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-brand-light" />
+                  Edit Plan Inputs
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -109,47 +169,37 @@ export default function Dashboard({ userProfile, onReset }) {
         </div>
       </section>
 
-      {activeView === 'present' ? (
-        <>
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-7">
-            <div className="xl:col-span-8 h-full flex flex-col">
-              <LifestyleBalance
-                userProfile={userProfile}
-                investmentPercentage={investmentPercentage}
-                onInvestmentChange={setInvestmentPercentage}
-                blendedRate={blendedRate}
-                allocatedPercentage={allocatedPercentage}
-              />
-            </div>
+      <div className={activeView === 'present' ? 'space-y-7' : 'hidden'}>
+        <LifestyleBalance
+          userProfile={userProfile}
+          investmentPercentage={investmentPercentage}
+          onInvestmentChange={setInvestmentPercentage}
+          blendedRate={blendedRate}
+          allocatedPercentage={allocatedPercentage}
+        />
 
-            <div className="xl:col-span-4 flex flex-col">
-              <Gamification
-                userProfile={userProfile}
-                investmentPercentage={investmentPercentage}
-                blendedRate={blendedRate}
-                allocatedPercentage={allocatedPercentage}
-              />
-            </div>
-          </div>
-          
-          <PortfolioBuilder 
-            monthlyInvestment={(Number(userProfile.income) || 0) * (investmentPercentage / 100)} 
-            onRateChange={handlePortfolioRateChange}
-          />
-        </>
-      ) : (
-        <div className="space-y-6">
-          <div className="glass-card rounded-3xl p-5 md:p-6 border border-white/10">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-400 font-semibold mb-2">Strategic Advisory Desk</p>
-            <h2 className="text-2xl md:text-3xl font-light text-white tracking-tight">AI Financial Plan</h2>
-            <p className="text-sm text-neutral-300 mt-2 max-w-3xl">
-              This view is intentionally separated from the present and future simulator to keep analysis and recommendations focused.
-            </p>
-          </div>
+        <PortfolioBuilder
+          monthlyInvestment={(Number(userProfile.income) || 0) * (investmentPercentage / 100)}
+          onRateChange={handlePortfolioRateChange}
+        />
+      </div>
 
-          <AIPlan userProfile={userProfile} shouldGenerate={planRequested} />
+      <div className={activeView === 'plan' ? 'space-y-6' : 'hidden'}>
+        <div className="glass-card rounded-3xl p-5 md:p-6 border border-white/10">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-400 font-semibold mb-2">Strategic Advisory Desk</p>
+          <h2 className="text-2xl md:text-3xl font-light text-white tracking-tight">AI Financial Plan</h2>
+          <p className="text-sm text-neutral-300 mt-2 max-w-3xl">
+            This view is intentionally separated from the present and future simulator to keep analysis and recommendations focused.
+          </p>
         </div>
-      )}
+
+        <AIPlan
+          userProfile={userProfile}
+          shouldGenerate={planRequested}
+          allocations={portfolioAllocations}
+          investmentPercentage={investmentPercentage}
+        />
+      </div>
     </div>
   );
 }

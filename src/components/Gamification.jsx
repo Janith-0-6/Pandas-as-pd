@@ -1,7 +1,27 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Medal, CheckCircle, Target, ShieldCheck, Zap, Layers, Globe, Star, Activity, Hexagon, Flame, Bitcoin, Dumbbell, Video, Tv, Camera, Sparkles, Recycle, Rocket, Palette, Music2, Leaf, Brain, Podcast, Footprints, ChefHat, Wrench } from 'lucide-react';
 
+const GOAL_CONFIG = [
+  { key: 'year1', wealthKey: 'year1', label: 'Year 1' },
+  { key: 'year3', wealthKey: 'year3', label: 'Year 3' },
+  { key: 'year5', wealthKey: 'year5', label: 'Year 5' },
+  { key: 'year10', wealthKey: 'year10', label: 'Year 10' },
+  { key: 'age60', wealthKey: 'atAge60', label: 'Age 60' }
+];
+
 export default function Gamification({ userProfile, investmentPercentage = 20, blendedRate = 12, allocatedPercentage = 100 }) {
+  const [goalMode, setGoalMode] = useState('recommended');
+  const [customGoals, setCustomGoals] = useState(null);
+
+  const formatCompactINR = (value) => {
+    const val = Number(value) || 0;
+    if (val >= 10000000) return `₹${(val / 10000000).toFixed(1).replace('.0', '')}Cr`;
+    if (val >= 100000) return `₹${(val / 100000).toFixed(1).replace('.0', '')}L`;
+    if (val >= 1000) return `₹${(val / 1000).toFixed(0)}K`;
+    return `₹${Math.round(val).toLocaleString('en-IN')}`;
+  };
+
+  const roundTo = (value, step) => Math.max(step, Math.round(value / step) * step);
 
   const interestMap = {
     // Original 7
@@ -34,7 +54,11 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
 
   // Dynamic wealth projection (same formula as LifestyleBalance)
   const income = Number(userProfile.income) || 0;
+  const age = userProfile.age || 22;
+  const yearsTo60 = Math.max(1, 60 - age);
   const monthlyInvestment = (income * investmentPercentage) / 100;
+  const annualIncome = income * 12;
+  const annualInvestable = monthlyInvestment * 12;
   const r = (blendedRate / 100) / 12; // dynamic annual -> monthly
   const allocationShare = Math.min(Math.max(allocatedPercentage / 100, 0), 1);
   const investedMonthly = monthlyInvestment * allocationShare;
@@ -60,38 +84,45 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
       year3: calc(3),
       year5: calc(5),
       year10: calc(10),
-      atAge60: calc(60 - (userProfile.age || 22)),
+      atAge60: calc(yearsTo60),
     };
-  }, [monthlyInvestment, investedMonthly, unallocatedMonthly, userProfile.age, r]);
+  }, [monthlyInvestment, investedMonthly, unallocatedMonthly, yearsTo60, r]);
+
+  const incomeDrivenTargets = useMemo(() => {
+    return {
+      year1: roundTo(Math.max(10000, annualIncome * 0.2), 1000),
+      year3: roundTo(Math.max(75000, annualIncome * 0.9), 5000),
+      year5: roundTo(Math.max(200000, annualIncome * 1.8), 10000),
+      year10: roundTo(Math.max(500000, annualIncome * 3.5), 10000),
+      age60: roundTo(Math.max(1500000, annualInvestable * yearsTo60 * 1.25), 50000)
+    };
+  }, [annualIncome, annualInvestable, yearsTo60]);
+
+  useEffect(() => {
+    setCustomGoals((prev) => prev ?? { ...incomeDrivenTargets });
+  }, [incomeDrivenTargets]);
+
+  const activeTargets = goalMode === 'custom' && customGoals ? customGoals : incomeDrivenTargets;
+
+  const updateCustomGoal = (key, value) => {
+    const numericValue = Number(value);
+    setCustomGoals((prev) => ({
+      ...(prev || incomeDrivenTargets),
+      [key]: Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0
+    }));
+  };
 
   // Dynamic milestones that unlock as projected wealth grows
-  const milestones = [
-    {
-      title: 'Capital Initiation: ₹10K Base',
-      unlocked: projectedWealth.year1 >= 10000,
-      detail: `Year 1 → ₹${Math.round(projectedWealth.year1).toLocaleString('en-IN')}`,
-    },
-    {
-      title: '₹1L Liquidity Benchmark',
-      unlocked: projectedWealth.year3 >= 100000,
-      detail: `Year 3 → ₹${Math.round(projectedWealth.year3).toLocaleString('en-IN')}`,
-    },
-    {
-      title: '₹5L Growth Milestone',
-      unlocked: projectedWealth.year5 >= 500000,
-      detail: `Year 5 → ₹${Math.round(projectedWealth.year5).toLocaleString('en-IN')}`,
-    },
-    {
-      title: '₹10L Wealth Builder',
-      unlocked: projectedWealth.year10 >= 1000000,
-      detail: `Year 10 → ₹${Math.round(projectedWealth.year10).toLocaleString('en-IN')}`,
-    },
-    {
-      title: '₹50L FI Target Achieved',
-      unlocked: projectedWealth.atAge60 >= 5000000,
-      detail: `Age 60 → ₹${Math.round(projectedWealth.atAge60).toLocaleString('en-IN')}`,
-    },
-  ];
+  const milestones = GOAL_CONFIG.map((goal) => {
+    const targetValue = Number(activeTargets?.[goal.key] || 0);
+    const achievedValue = Number(projectedWealth[goal.wealthKey] || 0);
+
+    return {
+      title: `${goal.label} Target: ${formatCompactINR(targetValue)}`,
+      unlocked: achievedValue >= targetValue,
+      detail: `${goal.label} → ₹${Math.round(achievedValue).toLocaleString('en-IN')}`
+    };
+  });
 
   const clearedCount = milestones.filter(m => m.unlocked).length;
 
@@ -134,6 +165,55 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
           </span>
         </div>
 
+        <div className="mb-5 rounded-xl border border-white/10 bg-black/25 p-3">
+          <div className="inline-flex bg-black/35 rounded-lg p-1 border border-white/10 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setGoalMode('recommended')}
+              className={`px-3 py-1.5 rounded-md text-[10px] uppercase tracking-[0.12em] font-semibold transition ${
+                goalMode === 'recommended'
+                  ? 'bg-brand-accent/15 text-brand-light border border-brand-light/35'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              Recommended
+            </button>
+            <button
+              type="button"
+              onClick={() => setGoalMode('custom')}
+              className={`px-3 py-1.5 rounded-md text-[10px] uppercase tracking-[0.12em] font-semibold transition ${
+                goalMode === 'custom'
+                  ? 'bg-brand-accent/15 text-brand-light border border-brand-light/35'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              My Goals
+            </button>
+          </div>
+
+          {goalMode === 'recommended' ? (
+            <p className="text-[11px] text-neutral-500 mt-2">
+              Recommended goals are auto-calculated from income, current investable cashflow, and years remaining to age 60.
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {GOAL_CONFIG.map((goal) => (
+                <label key={goal.key} className="text-[11px] text-neutral-400">
+                  <span className="block mb-1">{goal.label} Goal (INR)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={Number(customGoals?.[goal.key] || 0)}
+                    onChange={(e) => updateCustomGoal(goal.key, e.target.value)}
+                    className="w-full bg-black/35 border border-white/15 rounded-lg px-3 py-2 text-neutral-200 focus:outline-none focus:border-brand-light focus:ring-1 focus:ring-brand-light/30"
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Progress bar */}
         <div className="w-full h-1.5 bg-neutral-800 rounded-full mb-5 overflow-hidden">
           <div 
@@ -154,7 +234,7 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-center gap-2">
-                  <p className={`text-xs uppercase tracking-widest font-semibold truncate ${ms.unlocked ? 'text-brand-success/90' : 'text-neutral-300/80'}`}>{ms.title}</p>
+                    <p className={`text-[11px] uppercase tracking-[0.08em] font-semibold leading-snug ${ms.unlocked ? 'text-brand-success/90' : 'text-neutral-300/80'}`}>{ms.title}</p>
                   <p className={`text-[10px] font-mono px-2 py-1 rounded border shrink-0 ${
                     ms.unlocked 
                       ? 'text-brand-success bg-brand-success/10 border-brand-success/20' 

@@ -5,6 +5,9 @@ import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
 import TopNav from './components/TopNav';
 import ProfileSettings from './components/ProfileSettings';
+import PlanSettings from './components/PlanSettings';
+import ExpenseTracker from './components/ExpenseTracker';
+import ProgressionMetricsPage from './components/ProgressionMetricsPage';
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState('login');
@@ -58,7 +61,7 @@ function App() {
       const state = event.state;
       if (state?.screen) {
         setCurrentScreen(state.screen);
-        if (state.screen === 'dashboard' || state.screen === 'profile') {
+        if (state.screen === 'dashboard' || state.screen === 'profile' || state.screen === 'plan-settings' || state.screen === 'expenses' || state.screen === 'progression') {
           setIsLoggedIn(true);
           setUserProfile(state.userProfile || null);
         } else if (state.screen === 'onboarding') {
@@ -107,10 +110,30 @@ function App() {
     });
   };
 
-  const handleReset = () => {
-    setUserProfile(null);
-    setCurrentScreen('onboarding');
-    window.history.pushState({ screen: 'onboarding', isLoggedIn: true }, '', '/setup');
+  const handleEditAnswers = () => {
+    setCurrentScreen('plan-settings');
+    window.history.pushState({ screen: 'plan-settings', userProfile, isLoggedIn: true }, '', '/plan-settings');
+  };
+
+  const handlePlanSave = async (updatedPlanData) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const metadata = session?.user?.user_metadata || {};
+    const fullName = metadata.full_name || userProfile?.name || 'Investor';
+    const dynamicAge = calculateAge(metadata.dob);
+
+    const completeProfile = { ...updatedPlanData, name: fullName, age: dynamicAge };
+    setUserProfile(completeProfile);
+    setCurrentScreen('dashboard');
+    window.history.pushState({ screen: 'dashboard', userProfile: completeProfile }, '', '/dashboard');
+
+    await supabase.auth.updateUser({
+      data: { profile_data: updatedPlanData }
+    });
+  };
+
+  const handlePlanCancel = () => {
+    setCurrentScreen('dashboard');
+    window.history.pushState({ screen: 'dashboard', userProfile, isLoggedIn: true }, '', '/dashboard');
   };
 
   const navigateTo = (screen) => {
@@ -148,8 +171,22 @@ function App() {
         <div className="flex-1">
           {currentScreen === 'login' && <Login onLogin={handleLogin} />}
           {currentScreen === 'onboarding' && <Onboarding onComplete={handleComplete} />}
-          {currentScreen === 'dashboard' && <Dashboard userProfile={userProfile} onReset={handleReset} />}
+          {currentScreen === 'dashboard' && (
+            <Dashboard
+              userProfile={userProfile}
+              onEditAnswers={handleEditAnswers}
+            />
+          )}
           {currentScreen === 'profile' && <ProfileSettings userProfile={userProfile} onProfileUpdate={handleProfileSave} />}
+          {currentScreen === 'plan-settings' && (
+            <PlanSettings
+              initialData={userProfile}
+              onSave={handlePlanSave}
+              onCancel={handlePlanCancel}
+            />
+          )}
+          {currentScreen === 'expenses' && <ExpenseTracker userProfile={userProfile} />}
+          {currentScreen === 'progression' && <ProgressionMetricsPage userProfile={userProfile} />}
         </div>
         
       </main>

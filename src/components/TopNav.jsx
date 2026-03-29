@@ -1,4 +1,4 @@
-import { PieChart, User, LogOut } from 'lucide-react';
+import { PieChart, User, LogOut, ReceiptIndianRupee, Medal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function TopNav({ currentScreen, onNavigate, onSignOut }) {
@@ -39,6 +39,30 @@ export default function TopNav({ currentScreen, onNavigate, onSignOut }) {
         >
           <User className="w-4 h-4" />
           <span className="hidden sm:inline">Profile</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate('expenses')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+            currentScreen === 'expenses'
+              ? 'bg-cyan-400/20 text-cyan-300'
+              : 'text-neutral-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <ReceiptIndianRupee className="w-4 h-4" />
+          <span className="hidden sm:inline">Expenses</span>
+        </button>
+
+        <button
+          onClick={() => onNavigate('progression')}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+            currentScreen === 'progression'
+              ? 'bg-emerald-400/20 text-emerald-300'
+              : 'text-neutral-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Medal className="w-4 h-4" />
+          <span className="hidden sm:inline">Progression</span>
         </button>
 
         <div className="w-px h-5 bg-white/15 mx-1"></div>
