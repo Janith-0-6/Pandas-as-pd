@@ -12,8 +12,6 @@ const RISK_LEVELS = ['Conservative (Low)', 'Balanced (Medium)', 'Aggressive (Hig
 
 export default function Onboarding({ onComplete }) {
   const [formData, setFormData] = useState({
-    name: '',
-    age: 22,
     income: '',
     expenses: '',
     interests: [],
@@ -45,7 +43,7 @@ export default function Onboarding({ onComplete }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0) return;
+    if (!formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0) return;
     
     // Convert risk back to concise format
     const riskLevel = formData.risk.split(' ')[0];
@@ -69,39 +67,7 @@ export default function Onboarding({ onComplete }) {
 
       <form onSubmit={handleSubmit} className="space-y-8 glass-card p-6 md:p-10 rounded-3xl animate-reveal soft-outline" style={{ animationDelay: '0.2s' }}>
         
-        {/* Name */}
-        <div className="group">
-          <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Name</label>
-          <input 
-            type="text" 
-            placeholder="e.g. Alex"
-            className="w-full bg-black/30 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500"
-            value={formData.name}
-            onChange={e => setFormData({...formData, name: e.target.value})}
-            required
-          />
-        </div>
-
-        {/* Age Slider */}
-        <div className="group">
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] transition-colors group-focus-within:text-brand-light">Current Age</label>
-            <span className="text-white font-mono text-lg bg-black/40 px-3 py-1 rounded-md border border-white/10">{formData.age}</span>
-          </div>
-          <input 
-            type="range" 
-            min="18" max="30" 
-            value={formData.age}
-            onChange={e => setFormData({...formData, age: Number(e.target.value)})}
-            className="w-full h-1.5 bg-slate-700/70 rounded-lg appearance-none cursor-pointer mt-2"
-          />
-          <div className="flex justify-between text-[11px] text-neutral-500 mt-2">
-            <span>18</span>
-            <span>30</span>
-          </div>
-        </div>
-
-        {/* Income */}
+        {/* Income & Expenses */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div className="group">
             <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Monthly Income (INR)</label>
@@ -200,7 +166,7 @@ export default function Onboarding({ onComplete }) {
         <div className="pt-4">
           <button 
             type="submit"
-            disabled={!formData.name || !formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0}
+            disabled={!formData.income || !formData.expenses || !formData.risk || formData.interests.length === 0}
             className="w-full group relative flex items-center justify-center gap-3 bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950 font-semibold py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 overflow-hidden"
           >
             <span className="relative z-10 flex items-center gap-2">See Your Future <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" /></span>

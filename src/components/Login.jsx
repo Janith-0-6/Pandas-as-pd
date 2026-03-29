@@ -3,11 +3,13 @@ import { ArrowRight, Lock, UserPlus, LogIn, AlertCircle, CheckCircle2 } from 'lu
 import { supabase } from '../lib/supabase';
 
 export default function Login({ onLogin }) {
-  const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [credentials, setCredentials] = useState({ name: '', dob: '', email: '', password: '' });
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const maxDate = new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -17,9 +19,18 @@ export default function Login({ onLogin }) {
 
     try {
       if (isSignUp) {
+        if (!credentials.name.trim()) throw new Error("Full name is required to create an account.");
+        if (!credentials.dob) throw new Error("Date of Birth is required.");
+
         const { error } = await supabase.auth.signUp({
           email: credentials.email,
           password: credentials.password,
+          options: {
+            data: { 
+              full_name: credentials.name,
+              dob: credentials.dob 
+            }
+          }
         });
 
         if (error) throw error;
@@ -76,6 +87,37 @@ export default function Login({ onLogin }) {
           </div>
         )}
 
+        {isSignUp && (
+          <div className="space-y-4">
+            <div className="group animate-fade-in">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Full Name</label>
+              <input 
+                type="text" 
+                placeholder="e.g. Alex"
+                className="w-full bg-black/30 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500"
+                value={credentials.name}
+                onChange={e => setCredentials({...credentials, name: e.target.value})}
+                required={isSignUp}
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="group animate-fade-in">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Date of Birth</label>
+              <input 
+                type="date" 
+                max={maxDate}
+                className="w-full bg-black/30 border border-white/15 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-light focus:ring-2 focus:ring-brand-light/20 transition placeholder-neutral-500 [color-scheme:dark]"
+                value={credentials.dob}
+                onChange={e => setCredentials({...credentials, dob: e.target.value})}
+                required={isSignUp}
+                disabled={loading}
+              />
+              <p className="text-[11px] text-neutral-500 mt-2">You must be at least 18 years old.</p>
+            </div>
+          </div>
+        )}
+
         <div className="group">
           <label className="block text-xs font-bold text-neutral-400 uppercase tracking-[0.16em] mb-2 transition-colors group-focus-within:text-brand-light">Email Address</label>
           <input 
@@ -105,7 +147,7 @@ export default function Login({ onLogin }) {
         <div className="pt-2 flex flex-col sm:flex-row gap-3">
           <button 
             type="submit"
-            disabled={!credentials.email || !credentials.password || loading}
+            disabled={!credentials.email || !credentials.password || (isSignUp && (!credentials.name || !credentials.dob)) || loading}
             onClick={() => setIsSignUp(false)}
             className={`flex-1 group relative flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
               !isSignUp ? 'bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950' : 'bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10'
@@ -117,7 +159,7 @@ export default function Login({ onLogin }) {
 
           <button 
             type="submit"
-            disabled={!credentials.email || !credentials.password || loading}
+            disabled={!credentials.email || !credentials.password || (isSignUp && (!credentials.name || !credentials.dob)) || loading}
             onClick={() => setIsSignUp(true)}
             className={`flex-1 group relative flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden ${
               isSignUp ? 'bg-gradient-to-r from-teal-500 to-cyan-400 hover:brightness-110 text-slate-950' : 'bg-white/5 border border-white/10 text-neutral-300 hover:bg-white/10'

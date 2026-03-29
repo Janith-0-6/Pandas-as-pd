@@ -14,10 +14,11 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
 
   // Trigger parent rate change on allocation updates
   useEffect(() => {
-    const blendedRate = allocations.reduce((acc, weight, idx) => {
-      return acc + (weight / 100) * BUCKETS[idx].rate;
-    }, 0);
-    onRateChange(blendedRate);
+    const totalAllocated = allocations.reduce((acc, value) => acc + value, 0);
+    const blendedRate = totalAllocated > 0
+      ? allocations.reduce((acc, weight, idx) => acc + (weight / totalAllocated) * BUCKETS[idx].rate, 0)
+      : 0;
+    onRateChange(blendedRate, totalAllocated);
   }, [allocations, onRateChange]);
 
   const handleAllocationChange = (index, newValueStr) => {
@@ -26,40 +27,14 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
     if (newValue > 100) newValue = 100;
 
     setAllocations(prev => {
+      const othersTotal = prev.reduce((sum, value, i) => (i === index ? sum : sum + value), 0);
+      const maxAllowedForBucket = Math.max(0, 100 - othersTotal);
+      const clamped = Math.min(newValue, maxAllowedForBucket);
+
+      if (clamped === prev[index]) return prev;
+
       const newAllocations = [...prev];
-      const oldValue = newAllocations[index];
-      const diff = newValue - oldValue;
-      
-      if (diff === 0) return prev;
-
-      newAllocations[index] = newValue;
-      
-      const newRemaining = 100 - newValue;
-      const oldRemaining = 100 - oldValue;
-
-      if (oldRemaining === 0) {
-        // Distribute the remaining amount equally if it used to be 100%
-        const split = newRemaining / 3;
-        for (let i = 0; i < 4; i++) {
-          if (i !== index) newAllocations[i] = split;
-        }
-      } else {
-        // Distribute proportionally
-        for (let i = 0; i < 4; i++) {
-          if (i !== index) {
-             newAllocations[i] = (newAllocations[i] / oldRemaining) * newRemaining;
-          }
-        }
-      }
-      
-      // Fix floating point rounding issues
-      const sum = newAllocations.reduce((a, b) => a + b, 0);
-      if (Math.abs(sum - 100) > 0.001) {
-        const lastIdx = newAllocations.findIndex((_, i) => i !== index);
-        if (lastIdx !== -1) {
-          newAllocations[lastIdx] += (100 - sum);
-        }
-      }
+      newAllocations[index] = clamped;
       return newAllocations;
     });
   };
@@ -68,7 +43,13 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
   const handleCloseModal = () => setShowModal(false);
 
   const roundedTotal = Math.round(monthlyInvestment);
-  const blendedRate = allocations.reduce((acc, weight, idx) => acc + (weight / 100) * BUCKETS[idx].rate, 0).toFixed(2);
+  const totalAllocatedPercent = allocations.reduce((acc, value) => acc + value, 0);
+  const blendedRate = totalAllocatedPercent > 0
+    ? allocations.reduce((acc, weight, idx) => acc + (weight / totalAllocatedPercent) * BUCKETS[idx].rate, 0).toFixed(2)
+    : '0.00';
+  const remainingPercent = Math.max(0, 100 - totalAllocatedPercent);
+  const allocatedAmount = Math.round((totalAllocatedPercent / 100) * monthlyInvestment);
+  const remainingAmount = Math.max(0, roundedTotal - allocatedAmount);
 
   return (
     <div className="glass-card rounded-3xl p-6 md:p-8 mt-7 relative overflow-hidden group">
@@ -81,11 +62,16 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
           Your blended baseline return is currently <span className="text-brand-light font-mono font-bold">{blendedRate}%</span>.
           Adjust the sliders below to see your future charts react instantly.
         </p>
+        <p className="text-[11px] text-neutral-500 mt-2 font-mono">
+          Allocated: ₹{allocatedAmount.toLocaleString('en-IN')} ({Math.round(totalAllocatedPercent)}%) | Remaining: ₹{remainingAmount.toLocaleString('en-IN')} ({Math.round(remainingPercent)}%)
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {BUCKETS.map((bucket, i) => {
           const allocVal = allocations[i];
+          const otherTotal = allocations.reduce((sum, value, idx) => (idx === i ? sum : sum + value), 0);
+          const maxForThisBucket = Math.max(0, 100 - otherTotal);
           const rupeeVal = Math.round((allocVal / 100) * monthlyInvestment);
           const Icon = bucket.icon;
 
@@ -109,7 +95,7 @@ export default function PortfolioBuilder({ monthlyInvestment, onRateChange }) {
                 </div>
                 <input 
                   type="range" 
-                  min="0" max="100" step="1"
+                  min="0" max={maxForThisBucket} step="1"
                   value={allocVal}
                   onChange={e => handleAllocationChange(i, e.target.value)}
                   className="w-full h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer hover:bg-neutral-700 transition focus:outline-none focus:ring-1 focus:ring-brand-light/40"

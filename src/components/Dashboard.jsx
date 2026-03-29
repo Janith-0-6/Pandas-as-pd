@@ -10,12 +10,20 @@ export default function Dashboard({ userProfile, onReset }) {
   const [planRequested, setPlanRequested] = useState(false);
   const [investmentPercentage, setInvestmentPercentage] = useState(20);
   const [blendedRate, setBlendedRate] = useState(10.75);
+  const [allocatedPercentage, setAllocatedPercentage] = useState(100);
 
   useEffect(() => {
     setActiveView('present');
     setPlanRequested(false);
     setInvestmentPercentage(20);
+    setBlendedRate(10.75);
+    setAllocatedPercentage(100);
   }, [userProfile]);
+
+  const handlePortfolioRateChange = (rate, allocationPercent = 100) => {
+    setBlendedRate(rate);
+    setAllocatedPercentage(allocationPercent);
+  };
 
   const showPlanPage = () => {
     setPlanRequested(true);
@@ -105,17 +113,28 @@ export default function Dashboard({ userProfile, onReset }) {
         <>
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-7">
             <div className="xl:col-span-8 h-full flex flex-col">
-              <LifestyleBalance userProfile={userProfile} investmentPercentage={investmentPercentage} onInvestmentChange={setInvestmentPercentage} blendedRate={blendedRate} />
+              <LifestyleBalance
+                userProfile={userProfile}
+                investmentPercentage={investmentPercentage}
+                onInvestmentChange={setInvestmentPercentage}
+                blendedRate={blendedRate}
+                allocatedPercentage={allocatedPercentage}
+              />
             </div>
 
             <div className="xl:col-span-4 flex flex-col">
-              <Gamification userProfile={userProfile} investmentPercentage={investmentPercentage} blendedRate={blendedRate} />
+              <Gamification
+                userProfile={userProfile}
+                investmentPercentage={investmentPercentage}
+                blendedRate={blendedRate}
+                allocatedPercentage={allocatedPercentage}
+              />
             </div>
           </div>
           
           <PortfolioBuilder 
             monthlyInvestment={(Number(userProfile.income) || 0) * (investmentPercentage / 100)} 
-            onRateChange={setBlendedRate} 
+            onRateChange={handlePortfolioRateChange}
           />
         </>
       ) : (

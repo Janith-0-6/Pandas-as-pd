@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Activity, ShieldAlert, CheckCircle2, TrendingUp, AlertTriangle } from 'lucide-react';
 
-export default function LifestyleBalance({ userProfile, investmentPercentage, onInvestmentChange, blendedRate = 12 }) {
+export default function LifestyleBalance({ userProfile, investmentPercentage, onInvestmentChange, blendedRate = 12, allocatedPercentage = 100 }) {
 
   // Core Budgeting Logic
   const income = Number(userProfile.income) || 0;
@@ -23,6 +23,9 @@ export default function LifestyleBalance({ userProfile, investmentPercentage, on
 
   const monthlyInvestment = (income * investment) / 100;
   const monthlyDiscretionary = (income * discretionary) / 100;
+  const allocationShare = Math.min(Math.max(allocatedPercentage / 100, 0), 1);
+  const investedMonthly = monthlyInvestment * allocationShare;
+  const unallocatedMonthly = monthlyInvestment - investedMonthly;
 
   // Status Badge Logic
   let statusBadge = { title: '', desc: '', icon: null, color: '' };
@@ -60,21 +63,33 @@ export default function LifestyleBalance({ userProfile, investmentPercentage, on
   const chartData = useMemo(() => {
     const data = [];
     const r = (blendedRate / 100) / 12; // Monthly interest rate from blended portfolio
-    const P = monthlyInvestment;
+    const investedP = investedMonthly;
+    const idleP = unallocatedMonthly;
     
     for (let age = userProfile.age; age <= 60; age++) {
       let n = (age - userProfile.age) * 12; // Number of months
-      let fv = 0;
-      if (n > 0 && r > 0) {
-        fv = P * ((Math.pow(1 + r, n) - 1) / r);
+      let investedFv = 0;
+      let idleFv = 0;
+
+      if (n > 0 && investedP > 0) {
+        investedFv = r > 0
+          ? investedP * ((Math.pow(1 + r, n) - 1) / r)
+          : investedP * n;
       }
+
+      if (n > 0 && idleP > 0) {
+        idleFv = idleP * n;
+      }
+
+      const fv = investedFv + idleFv;
+
       data.push({
         age,
         Wealth: Math.round(fv)
       });
     }
     return data;
-  }, [userProfile.age, monthlyInvestment, blendedRate]);
+  }, [userProfile.age, investedMonthly, unallocatedMonthly, blendedRate]);
 
   const wealthAt60 = chartData[chartData.length - 1]?.Wealth || 0;
 
@@ -170,7 +185,7 @@ export default function LifestyleBalance({ userProfile, investmentPercentage, on
             <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1 flex items-center justify-between">
               <span>Estimated Wealth at Age 60</span>
               <span className="text-[9px] text-brand-light bg-brand-light/10 border border-brand-light/20 px-1.5 py-0.5 rounded ml-2">
-                @ {Number(blendedRate).toFixed(2)}% p.a.
+                {Math.round(allocatedPercentage)}% allocated @ {Number(blendedRate).toFixed(2)}% p.a.
               </span>
             </p>
             <p className="text-3xl lg:text-4xl font-light text-brand-light tracking-tight drop-shadow-md">

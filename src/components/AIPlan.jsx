@@ -5,20 +5,27 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 export default function AIPlan({ userProfile, shouldGenerate = false }) {
   const [loading, setLoading] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
     if (!shouldGenerate) {
       setLoading(false);
+      setIsRegenerating(false);
       return undefined;
     }
 
     const controller = new AbortController();
 
     async function fetchPlan() {
-      setLoading(true);
+      const refreshingExistingPlan = Boolean(plan);
+      if (refreshingExistingPlan) {
+        setIsRegenerating(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -50,17 +57,27 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
         }
 
         console.error(err);
-        setPlan(null);
+        if (!plan) {
+          setPlan(null);
+        }
         setError(err.message || 'Failed to initialize AI allocation model.');
       } finally {
         setLoading(false);
+        setIsRegenerating(false);
       }
     }
 
     fetchPlan();
 
     return () => controller.abort();
-  }, [userProfile, retryCount, shouldGenerate]);
+  }, [userProfile, requestVersion, shouldGenerate]);
+
+  const triggerRegenerate = () => {
+    if (loading || isRegenerating) {
+      return;
+    }
+    setRequestVersion((version) => version + 1);
+  };
 
   if (!shouldGenerate) {
     return (
@@ -75,7 +92,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
     );
   }
 
-  if (loading) {
+  if (loading && !plan) {
     return (
       <div className="glass-card rounded-3xl p-10 flex flex-col items-center justify-center min-h-[400px] text-center border-white/10">
         <Loader2 className="h-8 w-8 text-neutral-400 animate-spin mb-6" />
@@ -87,7 +104,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
     );
   }
 
-  if (error) {
+  if (error && !plan) {
     return (
       <div className="bg-black/60 rounded-3xl border border-red-500/20 p-8 flex flex-col items-center justify-center min-h-[400px]">
         <Target className="h-8 w-8 text-red-400 mb-4" />
@@ -95,7 +112,7 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
         <p className="text-sm text-neutral-400 text-center">{error}</p>
         <button
           type="button"
-          onClick={() => setRetryCount((count) => count + 1)}
+          onClick={triggerRegenerate}
           className="mt-6 px-5 py-2 rounded-lg border border-red-400/40 text-red-300 text-xs font-mono uppercase tracking-widest hover:bg-red-500/10 transition"
         >
           Retry Plan Generation
@@ -118,9 +135,27 @@ export default function AIPlan({ userProfile, shouldGenerate = false }) {
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-brand-accent/60 via-amber-200/50 to-transparent"></div>
 
       <div className="p-6 md:p-8">
-        <h2 className="text-xs uppercase tracking-[0.2em] font-semibold flex items-center gap-2 mb-6 text-neutral-300">
-          <BrainCircuit className="text-brand-light h-4 w-4" /> Advisory Engine
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <h2 className="text-xs uppercase tracking-[0.2em] font-semibold flex items-center gap-2 text-neutral-300">
+            <BrainCircuit className="text-brand-light h-4 w-4" /> Advisory Engine
+          </h2>
+
+          <button
+            type="button"
+            onClick={triggerRegenerate}
+            disabled={loading || isRegenerating}
+            className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg border border-white/20 text-[10px] uppercase tracking-[0.12em] font-semibold text-neutral-200 hover:border-brand-light/50 hover:text-brand-light transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isRegenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            {isRegenerating ? 'Regenerating...' : 'Regenerate Plan'}
+          </button>
+        </div>
+
+        {error ? (
+          <div className="mb-6 rounded-xl border border-red-500/25 bg-red-950/25 px-4 py-3 text-xs text-red-200">
+            Last regenerate failed: {error}
+          </div>
+        ) : null}
 
         <div className="bg-black/35 border-l-2 border-brand-light p-5 mb-8 rounded-r-xl">
           <div className="flex gap-3">

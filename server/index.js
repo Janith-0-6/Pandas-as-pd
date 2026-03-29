@@ -73,7 +73,12 @@ Interests: ${interests.join(', ')}
 Risk Appetite: ${risk}
 
 Instructions:
-Create a tailored financial plan for this user taking into account their unique baseline expenses. Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exact structure:
+Create a tailored financial plan for this user taking into account their unique baseline expenses.
+Mandatory personalization rules:
+- You MUST explicitly reference at least two of the exact selected interests by name in BOTH life_at_60_with_investing and life_at_60_without_investing.
+- You MUST avoid generic placeholders like "hobbies" or "lifestyle" when interests are available.
+- In each investment_ideas[i].why_suits_user, mention a concrete link to this user's data (risk appetite, income/expenses capacity, and/or selected interests).
+Output ONLY valid JSON, with nothing before or after. The JSON MUST use the exact structure:
 {
   "monthly_budget": {
     "needs_percentage": number,

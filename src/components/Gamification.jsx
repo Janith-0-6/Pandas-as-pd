@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Medal, CheckCircle, Target, ShieldCheck, Zap, Layers, Globe, Star, Activity, Hexagon, Flame, Bitcoin, Dumbbell, Video, Tv, Camera, Sparkles, Recycle, Rocket, Palette, Music2, Leaf, Brain, Podcast, Footprints, ChefHat, Wrench } from 'lucide-react';
 
-export default function Gamification({ userProfile, investmentPercentage = 20, blendedRate = 12 }) {
+export default function Gamification({ userProfile, investmentPercentage = 20, blendedRate = 12, allocatedPercentage = 100 }) {
 
   const interestMap = {
     // Original 7
@@ -34,15 +34,26 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
 
   // Dynamic wealth projection (same formula as LifestyleBalance)
   const income = Number(userProfile.income) || 0;
-  const userExpenses = Number(userProfile.expenses) || 0;
   const monthlyInvestment = (income * investmentPercentage) / 100;
   const r = (blendedRate / 100) / 12; // dynamic annual -> monthly
+  const allocationShare = Math.min(Math.max(allocatedPercentage / 100, 0), 1);
+  const investedMonthly = monthlyInvestment * allocationShare;
+  const unallocatedMonthly = monthlyInvestment - investedMonthly;
 
   const projectedWealth = useMemo(() => {
     const calc = (years) => {
       const n = years * 12;
-      if (n <= 0 || r <= 0 || monthlyInvestment <= 0) return 0;
-      return monthlyInvestment * ((Math.pow(1 + r, n) - 1) / r);
+      if (n <= 0 || monthlyInvestment <= 0) return 0;
+
+      let investedFv = 0;
+      if (investedMonthly > 0) {
+        investedFv = r > 0
+          ? investedMonthly * ((Math.pow(1 + r, n) - 1) / r)
+          : investedMonthly * n;
+      }
+
+      const idleFv = unallocatedMonthly > 0 ? unallocatedMonthly * n : 0;
+      return investedFv + idleFv;
     };
     return {
       year1: calc(1),
@@ -51,7 +62,7 @@ export default function Gamification({ userProfile, investmentPercentage = 20, b
       year10: calc(10),
       atAge60: calc(60 - (userProfile.age || 22)),
     };
-  }, [monthlyInvestment, userProfile.age, r]);
+  }, [monthlyInvestment, investedMonthly, unallocatedMonthly, userProfile.age, r]);
 
   // Dynamic milestones that unlock as projected wealth grows
   const milestones = [
