@@ -135,4 +135,4 @@ npm run lint       # lint checks
 ```
 
 ### Note
-- The build is working properly but you might face API call issues
+- The construction is functioning correctly; however, issues with API calls may be encountered.
